@@ -1,0 +1,5 @@
+(undo-tree-save-format-version . 1)
+"236ff2101c07dc8978a355058192dbf8cb1e45a4"
+[nil nil nil nil (26978 52114 368008 0) 0 nil]
+([nil current ((nil rear-nonsticky nil 1119 . 1120) (nil fontified nil 1099 . 1120) (nil fontified nil 1098 . 1099) (nil fontified nil 1097 . 1098) (nil fontified nil 1091 . 1097) (nil fontified nil 1090 . 1091) (nil fontified nil 1 . 1090) (1 . 1120) (t . -1)) nil (26978 52114 368006 0) 0 nil])
+nil
