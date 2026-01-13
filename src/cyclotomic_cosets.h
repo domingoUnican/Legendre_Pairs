@@ -59,4 +59,5 @@ bool coset_is_subset_of(const Coset *a, const Coset *b);
  */
 uint8_t* coset_membership_vector(const Coset *c, const CosetList *cl);
 
+
 #endif /* CYCLOTOMIC_COSETS_H */
