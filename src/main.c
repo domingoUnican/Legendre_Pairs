@@ -255,7 +255,7 @@ int save_vectors(const CosetVectors *cv, const char *filename) {
 /* Convierte vector binario a complejo (-1/+1) */
 static void binary_to_complex(const uint8_t *binary, double complex *complex_arr, size_t N) {
     for (size_t i = 0; i < N; i++) {
-        complex_arr[i] = (binary[i] == 0) ? -1.0 + 0.0*I : 1.0 + 0.0*I;
+        complex_arr[i] = (binary[i] == 0) ? 1.0 + 0.0*I : 0 + 0.0*I;
     }
 }
 
@@ -267,7 +267,7 @@ int save_dft_both(const CosetVectors *cv, const char *filename1,  const char *fi
     }
     
     // Calcular valor constante (N-3)/2
-    double constant = (double)(N - 3) / 2.0;
+    double constant = (N+1)/2;
     
     FILE *file1 = fopen(filename1, "w");
     FILE *file2 = fopen(filename2, "w");
@@ -294,23 +294,29 @@ int save_dft_both(const CosetVectors *cv, const char *filename1,  const char *fi
     //printf("Valor constante: (N-3)/2 = (%.0f-3)/2 = %.1f\n", (double)N, constant);
     
     for (size_t i = 0; i < cv->num_vectors; i++) {
+        
         binary_to_complex(cv->vectors[i], time_domain, N);
         dft(time_domain, freq_domain, N);
         
+        
         // Escribir en primer fich: módulo redondeado
-        for (size_t j = 0; j < N; j++) {
-            double modulo = cabs(freq_domain[j]);
+        printf("********\n");
+        for (size_t j = 1; j < N; j++) {
+
+            double modulo = pow(cabs(freq_domain[j]),2);
             double rounded = rint(modulo);
+
+            printf("%f : %f : %f : %f\n",creal(time_domain[j]), creal(freq_domain[j]), modulo, rounded);
             fprintf(file1, "%.0f", rounded);
             if (j + 1 < N) fprintf(file1, " ");
         }
         fprintf(file1, "\n");
         
         // Escribir en segundo fich: (N-3)/2 - módulo redondeado
-        for (size_t j = 0; j < N; j++) {
-            double modulo = cabs(freq_domain[j]);
+        for (size_t j = 1; j < N; j++) {
+            double modulo = pow(cabs(freq_domain[j]),2);
             double rounded = rint(modulo);
-            double transformed = abs(constant - rounded);
+            double transformed = constant - rounded;
             
             fprintf(file2, "%.0f", rint(transformed));
             
@@ -344,6 +350,7 @@ void show_specific_lines(const char *combinations_path, size_t line1, size_t lin
     
     // Buscar las dos líneas
     while (fgets(buffer, sizeof(buffer), file)) {
+       //printf("Leyendo indice %zu: %s", current_line, buffer);
         if (current_line == line1 || current_line == line2) {
             // Asignar a la posición correcta (0 para line1, 1 para line2)
             int index = (current_line == line1) ? 0 : 1;
@@ -360,7 +367,7 @@ void show_specific_lines(const char *combinations_path, size_t line1, size_t lin
             }
         }
         
-        // Si ya encontramos ambas, salir
+        // Si ya encontramos ambas, salir3
         if (lines[0] && lines[1]) break;
         current_line++;
     }
@@ -446,8 +453,8 @@ void find_matches_files(const char *file1_path, const char *file2_path, const ch
 
 
 int main(void) {
-    size_t N = 7;
-    size_t k = 2;
+    size_t N = 45;
+    size_t k = 7;
     printf("N=%d k=%d\n\n",N,k);
 
     // Calcular cosets
@@ -472,6 +479,7 @@ int main(void) {
     }
     
     free_cosetlist(&cl);
+    print("===FIN===")
     getchar();
     return 0;
 }
