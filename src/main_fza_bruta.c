@@ -161,7 +161,8 @@ void print_coset_vectors(const CosetVectors *cv, const CosetList *cl) {
     printf("=== Vectores basados en cosets ===\n");
     printf("Cosets: %zu\n", cl->len);
     printf("Vectores: %zu (2^%zu)\n\n", cv->num_vectors, cl->len);
-    
+
+    /*
     // Imprimir mapeo coset → elementos
     printf("Mapeo cosets:\n ");
     for (size_t i = 0; i < cl->len; i++) {
@@ -188,6 +189,7 @@ void print_coset_vectors(const CosetVectors *cv, const CosetList *cl) {
         printf("\n");
     }
     printf("\n");
+    */
 }
 
 
@@ -300,13 +302,13 @@ int save_dft_both(const CosetVectors *cv, const char *filename1,  const char *fi
         
         
         // Escribir en primer fich: módulo redondeado
-        printf("********\n");
+        //printf("********\n");
         for (size_t j = 1; j < N; j++) {
 
             double modulo = pow(cabs(freq_domain[j]),2);
             double rounded = rint(modulo);
 
-            printf("%f : %f : %f : %f\n",creal(time_domain[j]), creal(freq_domain[j]), modulo, rounded);
+            //printf("%f : %f : %f : %f\n",creal(time_domain[j]), creal(freq_domain[j]), modulo, rounded);
             fprintf(file1, "%.0f", rounded);
             if (j + 1 < N) fprintf(file1, " ");
         }
@@ -331,7 +333,7 @@ int save_dft_both(const CosetVectors *cv, const char *filename1,  const char *fi
     fclose(file2);
 
     printf("Modulo DFT redondeado guardado\n");
-    printf("(|(N-3)/2 - modulo)| redondeado guardado\n\n");
+    printf("(|cte - modulo)| redondeado guardado\n\n");
     
     return 1;
 }
@@ -361,18 +363,10 @@ void show_specific_lines(const char *combinations_path, size_t line1, size_t lin
         if (lines[0] && lines[1]) break;
         current_line++;
     }
-    
-    // Mostrar resultados y guardar en fichero
-    if (lines[0]) {
-        printf("  - Linea %zu del primer fichero: \t%s\n", line1, lines[0]);
-    }
-
-    if (lines[1]) {
-        printf("  - Linea %zu del segundo fichero: \t%s\n", line2, lines[1]);
-    }
 
     // Escritura en lp.txt con el formato par1\npar2\n\n
     if (lines[0] && lines[1] && lp_file) {
+        printf(" - LP ENCONTRADO\n");
         fprintf(lp_file, "%s\n", lines[0]);
         fprintf(lp_file, "%s\n\n", lines[1]);
     }
@@ -442,84 +436,14 @@ void find_matches_files(const char *file1_path, const char *file2_path, const ch
     free(lines2);
     fclose(f1); fclose(f2); fclose(lp_file);
 }
-void generar_opciones_comprimidas(int N, int C) {
-    if (N % C != 0) {
-        printf("Error: N=%d no es divisible por el factor de compresion C=%d\n", N, C);
-        return;
-    }
 
-    int L = N / C; // Longitud del vector resultante
-    printf("N=%d, C=%d -> Longitud comprimida L=%d\n", N, C, L);
-    printf("Cada posicion puede variar entre 0 y %d\n", C);
-    printf("--- Generando combinaciones ---\n");
-
-    // número total de combinaciones (C + 1)^L
-    long long total_combinaciones = 1;
-    for (int i = 0; i < L; i++) total_combinaciones *= (C + 1);
-
-    printf("Total de secuencias posibles: %lld\n\n", total_combinaciones);
-
-
-    int *secuencia = (int *)calloc(L, sizeof(int));
-
-    for (long long i = 0; i < total_combinaciones; i++) {
-        // Imprimir secuencia actual
-        printf("[");
-        for (int j = 0; j < L; j++) {
-            printf("%d", secuencia[j]);
-            if (j < L - 1) printf(", ");
-        }
-        printf("]\n");
-
-        for (int j = L - 1; j >= 0; j--) {
-            if (secuencia[j] < C) {
-                secuencia[j]++;
-                break;
-            } else {
-                secuencia[j] = 0;
-            }
-        }
-    }
-
-    free(secuencia);
-}
-void analizar_cosets_comprimidos(size_t N, size_t k, size_t C) {
-    if (N % C != 0) {
-        printf("Error: N=%zu no es divisible por el factor C=%zu\n", N, C);
-        return;
-    }
-
-    size_t L = N / C; // Nueva longitud del vector
-
-    //Calcular cosets para la longitud reducida L
-    CosetList cl_comprimida = cyclotomic_cosets(k, L);
-
-    printf("\n=== Cosets del Espacio Comprimido (Modulo %zu) ===\n", L);
-    for (size_t i = 0; i < cl_comprimida.len; i++) {
-        printf("C_comp[%zu] = { ", i);
-        for (size_t j = 0; j < cl_comprimida.data[i].len; j++) {
-            printf("%zu", cl_comprimida.data[i].data[j]);
-            if (j + 1 < cl_comprimida.data[i].len) printf(", ");
-        }
-        printf(" }\n");
-    }
-
-    printf("\nCada uno de estos %zu cosets puede tomar valores en el rango [0, %zu]\n", 
-            cl_comprimida.len, C);
-    
-    
-    free_cosetlist(&cl_comprimida);
-}
 
 
 int main(void) {
-    size_t N = 10;
-    size_t k = 2;
-    size_t C = 5;
-    printf("N=%d k=%d C=%d\n\n",N,k,C);
-    generar_opciones_comprimidas(N, C);
-    analizar_cosets_comprimidos(N,k,C);
-    /*
+    size_t N = 99;
+    size_t k = 70;
+    printf("N=%d k=%d\n\n",N,k);
+
     // Calcular cosets
     CosetList cl = cyclotomic_cosets(k, N);
     //cosetlist_print(&cl);
@@ -543,7 +467,6 @@ int main(void) {
     
     free_cosetlist(&cl);
     printf("===FIN===");
-    */
     getchar();
     return 0;
 }
