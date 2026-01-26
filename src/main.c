@@ -6,15 +6,8 @@
 #include "mymath.h"
 #include <complex.h>
 #include <math.h>
-#include <time.h>
 
-const char *PATH_COMP_COSETS = "comp_cte_cosets.txt";          // Secuencias originales filtradas
-const char *PATH_COMP_DFT_COSETS      = "comp_dft_cosets.txt"; // Magnitudes de la DFT
-const char *PATH_COMP_LP     = "comp_lp.txt";                  // Pares encontrados comprimidos
-const char *PATH_COMBINATIONS     = "combinations.txt";        // Combinaciones descomprimidas
-const char *PATH_DFT    = "dft.txt";                           // DFT de las combinaciones
-const char *PATH_CTEDFT     = "cte-dft.txt";                   // Constante - DFT de las combinaciones
-const char *PATH_LP    = "lp.txt";                             // LPS
+
 
 static void print_bits(const uint8_t *v, size_t n, const char *name) {
     printf("%s = [", name);
@@ -79,7 +72,7 @@ uint8_t* generate_vector_for_combination(const CosetList *cl,
     
     return vector;
 }
-// Hagamos otra función
+
 
 
 /* Genera todos los vectores basados en combinaciones de cosets */
@@ -169,7 +162,8 @@ void print_coset_vectors(const CosetVectors *cv, const CosetList *cl) {
     printf("=== Vectores basados en cosets ===\n");
     printf("Cosets: %zu\n", cl->len);
     printf("Vectores: %zu (2^%zu)\n\n", cv->num_vectors, cl->len);
-    
+
+    /*
     // Imprimir mapeo coset → elementos
     printf("Mapeo cosets:\n ");
     for (size_t i = 0; i < cl->len; i++) {
@@ -196,8 +190,26 @@ void print_coset_vectors(const CosetVectors *cv, const CosetList *cl) {
         printf("\n");
     }
     printf("\n");
+    */
 }
 
+
+uint8_t** PSD(const CosetVectors * cv, size_t N) {
+    double psd_total = 0.0;
+    uint8_t resultado[cv->num_vectors][N];
+    complex double dft_temp[N];
+
+    for (size_t i = 0; i < cv->num_vectors; i++) {
+        dft(dft_temp, (double complex *)cv->vectors[i], N);
+        for (size_t j = 0; j < N; j++) {
+            
+            resultado[i][j] = rint(creal(dft_temp[j]) * creal(dft_temp[j]) + cimag(dft_temp[j]) * cimag(dft_temp[j]));
+        }
+    }
+
+    return resultado;   
+    
+}   
 
 void print_first_k_vectors(const CosetVectors *cv, size_t k) {
     if (!cv) {
@@ -308,13 +320,13 @@ int save_dft_both(const CosetVectors *cv, const char *filename1,  const char *fi
         
         
         // Escribir en primer fich: módulo redondeado
-        printf("********\n");
+        //printf("********\n");
         for (size_t j = 1; j < N; j++) {
 
             double modulo = pow(cabs(freq_domain[j]),2);
             double rounded = rint(modulo);
 
-            printf("%f : %f : %f : %f\n",creal(time_domain[j]), creal(freq_domain[j]), modulo, rounded);
+            //printf("%f : %f : %f : %f\n",creal(time_domain[j]), creal(freq_domain[j]), modulo, rounded);
             fprintf(file1, "%.0f", rounded);
             if (j + 1 < N) fprintf(file1, " ");
         }
@@ -339,16 +351,15 @@ int save_dft_both(const CosetVectors *cv, const char *filename1,  const char *fi
     fclose(file2);
 
     printf("Modulo DFT redondeado guardado\n");
-    printf("(|(N-3)/2 - modulo)| redondeado guardado\n\n");
+    printf("(|cte - modulo)| redondeado guardado\n\n");
     
     return 1;
 }
 
-void show_specific_lines(size_t line1, size_t line2, FILE *lp_file) {
-    FILE *file = fopen(PATH_COMBINATIONS, "r");
-    bool encontrado = true;
+void show_specific_lines(const char *combinations_path, size_t line1, size_t line2, FILE *lp_file) {
+    FILE *file = fopen(combinations_path, "r");
     if (!file) {
-        printf("ERROR: No se pudo abrir '%s'\n", PATH_COMBINATIONS);
+        printf("ERROR: No se pudo abrir '%s'\n", combinations_path);
         return;
     }
     
@@ -370,24 +381,12 @@ void show_specific_lines(size_t line1, size_t line2, FILE *lp_file) {
         if (lines[0] && lines[1]) break;
         current_line++;
     }
-    /*
-    // Mostrar resultados y guardar en fichero
-    if (lines[0]) {
-        printf("  - Linea %zu del primer fichero: \t%s\n", line1, lines[0]);
-    }
 
-    if (lines[1]) {
-        printf("  - Linea %zu del segundo fichero: \t%s\n", line2, lines[1]);
-    }
-    */
     // Escritura en lp.txt con el formato par1\npar2\n\n
     if (lines[0] && lines[1] && lp_file) {
+        printf(" - LP ENCONTRADO\n");
         fprintf(lp_file, "%s\n", lines[0]);
         fprintf(lp_file, "%s\n\n", lines[1]);
-        if(encontrado){
-            encontrado=false;
-            printf("LP ENCONTRADO!\n");
-        }
     }
     
     // Limpieza de memoria
@@ -402,10 +401,10 @@ typedef struct {
     size_t original_index;
 } DFTLine;
 
-void find_matches_files() {
-    FILE *f1 = fopen(PATH_DFT, "r");
-    FILE *f2 = fopen(PATH_CTEDFT, "r");
-    FILE *lp_file = fopen(PATH_LP, "w");
+void find_matches_files(const char *file1_path, const char *file2_path, const char *combinations_path) {
+    FILE *f1 = fopen(file1_path, "r");
+    FILE *f2 = fopen(file2_path, "r");
+    FILE *lp_file = fopen("lp.txt", "w");
     
     if (!f1 || !f2 || !lp_file) {
         if (f1) fclose(f1); if (f2) fclose(f2);
@@ -430,7 +429,7 @@ void find_matches_files() {
         total_lines2++;
     }
 
-    printf("Buscando LPS...\n");
+    printf("=== BUSCANDO LPS ===\n");
     char line1[4096];
     size_t line1_num = 0;
     while (fgets(line1, sizeof(line1), f1)) {
@@ -443,7 +442,7 @@ void find_matches_files() {
             if (strcmp(line1, lines2[j].data) == 0) {
                 // Si el problema exige que el par sea (A, B) tal que i < j para no duplicar:
                 if (line1_num < lines2[j].original_index) { 
-                    show_specific_lines(line1_num, lines2[j].original_index, lp_file);
+                    show_specific_lines(combinations_path, line1_num, lines2[j].original_index, lp_file);
                 }
             }
         }
@@ -456,520 +455,132 @@ void find_matches_files() {
     fclose(f1); fclose(f2); fclose(lp_file);
 }
 
+void process_and_filter_vectors(const CosetList *cl, size_t N) {
+    if (!cl) return;
 
+    size_t num_cosets = cl->len;
+    size_t num_vectors = 1ULL << num_cosets;
+    
+    // Umbral de la condición: (N + 1) / 2
+    double threshold = ((double)N + 1.0) / 2.0;
+    double constant = ((double)N + 1.0) / 2.0; 
+    size_t matches_found = 0;
 
-bool is_constant_on_cosets(const double *x, const CosetList *cl) {
-    for (size_t i = 0; i < cl->len; ++i) {
-        const Coset *c = &cl->data[i];
-        if (c->len <= 1) continue;
+    // Abrir archivos para guardar solo lo que cumpla la condición
+    FILE *f_comb = fopen("combinations.txt", "a");
+    FILE *f_psd  = fopen("dft.txt", "a");
+    FILE *f_cte  = fopen("cte-dft.txt", "a");
 
-        // Tomamos el valor del primer índice del coset como referencia
-        double reference_value = x[c->data[0]];
+    if (!f_comb || !f_psd || !f_cte) {
+        printf("ERROR: No se pudieron abrir los archivos.\n");
+        return;
+    }
+
+    // Buffers de trabajo (RAM constante)
+    double complex *time_domain = malloc(N * sizeof(double complex));
+    double complex *freq_domain = malloc(N * sizeof(double complex));
+    uint8_t *combination = malloc(num_cosets * sizeof(uint8_t));
+    double *current_psd = malloc(N * sizeof(double));
+
+    printf("=== INICIANDO PROCESO (N=%zu) ===\n", N);
+    printf("Condicion: Max(PSD) < %.2f\n", threshold);
+
+    for (size_t i = 0; i < num_vectors; i++) {
+        // 1. Generar combinación binaria de los cosets
+        for (size_t j = 0; j < num_cosets; j++) {
+            combination[j] = (i >> j) & 1;
+        }
+
+        // 2. Mapear cosets al vector de bits de longitud N
+        uint8_t *vector_bits = generate_vector_for_combination(cl, combination, N);
         
-        for (size_t j = 1; j < c->len; ++j) {
-            // Usamos un pequeño margen de error (epsilon) para comparaciones double
-            if (fabs(x[c->data[j]] - reference_value) > 1e-9) {
-                return false; 
-            }
-        }
-    }
-    return true;
-}
-
-void generar_opciones_comprimidas(int N, int C, const CosetList *cl) {
-    if (N % C != 0) {
-        printf("Error: N=%d no es divisible por C=%d\n", N, C);
-        return;
-    }
-
-    int L = N / C;
-    FILE *f = fopen("comp_cte_cosets.txt", "w");
-    if (!f) return;
-
-    long long total_posibles = 1;
-    for (int i = 0; i < L; i++) total_posibles *= (C + 1);
-
-    int *secuencia = (int *)calloc(L, sizeof(int));
-    size_t guardados = 0;
-
-    printf("Secuencias posibles: %zu \n", total_posibles);
-    for (long long i = 0; i < total_posibles; i++) {
-        // Convertimos temporalmente a double para usar la función de verificación
-        double *temp_v = malloc(L * sizeof(double));
-        for(int j=0; j<L; j++) temp_v[j] = (double)secuencia[j];
-
-        if (is_constant_on_cosets(temp_v, cl)) {
-            for (int j = 0; j < L; j++) {
-                fprintf(f, "%d ", secuencia[j]);
-            }
-            fprintf(f, "\n");
-            guardados++;
-        }
-        free(temp_v);
-
-        for (int j = L - 1; j >= 0; j--) {
-            if (secuencia[j] < C) {
-                secuencia[j]++;
-                break;
-            } else {
-                secuencia[j] = 0;
-            }
-        }
-    }
-
-
-    fclose(f);
-    free(secuencia);
-}
-
-
-void analizar_cosets_comprimidos(size_t N, size_t k, size_t C) {
-    if (N % C != 0) {
-        printf("Error: N=%zu no es divisible por el factor C=%zu\n", N, C);
-        return;
-    }
-
-    size_t L = N / C; 
-    CosetList cl_comprimida = cyclotomic_cosets(k, L);
-
-    printf("\nCosets del espacio comprimido (Modulo %zu) \n", L);
-    cosetlist_print(&cl_comprimida);
-
-    FILE *f_in = fopen("comp_cte_cosets.txt", "r");
-    FILE *f_out = fopen("comp_dft_cosets.txt", "w");
-
-    if (!f_in || !f_out) {
-        printf("ERROR: No se pudieron abrir los archivos de datos.\n");
-        if (f_in) fclose(f_in);
-        free_cosetlist(&cl_comprimida);
-        return;
-    }
-
-    double *v_comp = malloc(L * sizeof(double));
-    double complex *x_in = malloc(L * sizeof(double complex));
-    double complex *X_out = malloc(L * sizeof(double complex));
-    size_t count = 0;
-
-
-    while (true) {
-        bool read_ok = true;
-        for (size_t i = 0; i < L; i++) {
-            if (fscanf(f_in, "%lf", &v_comp[i]) != 1) {
-                read_ok = false;
-                break;
-            }
-        }
-        if (!read_ok) break;
-
-        if (is_constant_on_cosets(v_comp, &cl_comprimida)) {
-            for (size_t i = 0; i < L; i++) {
-                x_in[i] = v_comp[i] + 0.0 * I;
-            }
-
-            dft(x_in, X_out, L);
-
-            // Guardar abs(DFT(comprimido)^2) como ENTEROS
-            for (size_t i = 0; i < L; i++) {
-                double power = creal(X_out[i]) * creal(X_out[i]) + 
-                               cimag(X_out[i]) * cimag(X_out[i]);
-                
-                // Redondeamos y casteamos a int
-                int power_int = (int)round(power); 
-                
-                fprintf(f_out, "%d%s", power_int, (i == L - 1) ? "" : " ");
-            }
-            fprintf(f_out, "\n");
-            count++;
-        }
-    }
-
-    printf("Secuencias comprimidas constantes en cosets: %zu \n\n", count);
-
-    free(v_comp);
-    free(x_in);
-    free(X_out);
-    fclose(f_in);
-    fclose(f_out);
-    free_cosetlist(&cl_comprimida);
-}
-
-void process_compressed_cosets(const double *comprimido, size_t N, const CosetList *cl) {
-    
-    // 1. Verificar si es constante en los cosets
-    if (!is_constant_on_cosets(comprimido, cl)) {
-        return;
-    }
-
-    // 2. Preparar datos para la DFT (de double a double complex)
-    double complex *x_complex = malloc(N * sizeof(double complex));
-    double complex *X_output = malloc(N * sizeof(double complex));
-    
-    if (!x_complex || !X_output) {
-        fprintf(stderr, "Error de memoria en DFT\n");
-        free(x_complex); free(X_output);
-        return;
-    }
-
-    for (size_t i = 0; i < N; i++) {
-        x_complex[i] = comprimido[i] + 0.0 * I;
-    }
-
-    // 3. Calcular la DFT usando tu función de mymath.c
-    dft(x_complex, X_output, N);
-
-    // 4. Guardar abs(DFT)^2 en el fichero
-    FILE *f = fopen(PATH_COMP_DFT_COSETS, "a");
-    if (f) {
-        for (size_t k = 0; k < N; k++) {
-            // Magnitud al cuadrado: real^2 + imag^2
-            double power = creal(X_output[k]) * creal(X_output[k]) + 
-                           cimag(X_output[k]) * cimag(X_output[k]);
-            
-            fprintf(f, "%f%s", power, (k == N - 1) ? "" : " ");
-        }
-        fprintf(f, "\n");
-        fclose(f);
-    }
-
-    // Limpieza
-    free(x_complex);
-    free(X_output);
-}
-void buscar_pares_complementarios(size_t N, size_t C) {
-    // Rutas hardcodeadas
-
-    FILE *f_dft = fopen(PATH_COMP_DFT_COSETS, "r");
-    FILE *f_orig = fopen(PATH_COMP_COSETS, "r");
-    
-    if (!f_dft || !f_orig) {
-        printf("ERROR: No se pudo abrir %s o %s\n", PATH_COMP_DFT_COSETS, PATH_COMP_COSETS);
-        if (f_dft) fclose(f_dft);
-        if (f_orig) fclose(f_orig);
-        return;
-    }
-
-    double objetivo_double = (double) (N + 1) / 2.0;
-    int objetivo = (int)round(objetivo_double);
-
-    // 1. Cargamos las magnitudes (Columna 1) y las secuencias originales
-    size_t capacidad = 2000;
-    size_t total = 0;
-    int *col1 = malloc(capacidad * sizeof(int));
-    char **secuencias = malloc(capacidad * sizeof(char *));
-
-    char buffer[4096];
-    // Leemos ambos archivos en paralelo para mantener la correspondencia de líneas
-    while (fgets(buffer, sizeof(buffer), f_dft)) {
-        if (total >= capacidad) {
-            capacidad *= 2;
-            col1 = realloc(col1, capacidad * sizeof(int));
-            secuencias = realloc(secuencias, capacidad * sizeof(char *));
-        }
-        
-        // Extraer el valor de la columna 1 (el segundo entero de la fila)
-        int col0_dummy;
-        if (sscanf(buffer, "%d %d", &col0_dummy, &col1[total]) >= 2) {
-            
-            // Leer la secuencia original de comp.txt
-            char line_orig[4096];
-            if (fgets(line_orig, sizeof(line_orig), f_orig)) {
-                // Limpiar el salto de línea
-                size_t len = strlen(line_orig);
-                if (len > 0 && line_orig[len-1] == '\n') line_orig[len-1] = '\0';
-                
-                secuencias[total] = strdup(line_orig);
-                total++;
-            }
-        }
-    }
-    fclose(f_dft);
-    fclose(f_orig);
-
-    // 2. Comparación y guardado de pares
-    FILE *f_out = fopen(PATH_COMP_LP, "w");
-    if (!f_out) {
-        printf("ERROR: No se pudo crear %s\n", PATH_COMP_LP);
-        return;
-    }
-
-    size_t encontrados = 0;
-    for (size_t i = 0; i < total; i++) {
-        for (size_t j = i + 1; j < total; j++) {
-            if ((col1[i] + col1[j]) == objetivo) {
-                // Formato: secuencia1\nsecuencia2\n\n
-
-                fprintf(f_out, "%s\n%s\n\n", secuencias[i], secuencias[j]);
-                encontrados++;
-            }
-        }
-    }
-
-    printf("\nCandidatos comprimidos: %d \n", encontrados);
-
-    // Limpieza de memoria
-    for (size_t i = 0; i < total; i++) {
-        free(secuencias[i]);
-    }
-    free(secuencias);
-    free(col1);
-    fclose(f_out);
-}
-
-void generar_sub_combs(int n, int k, uint8_t **res, int *count) {
-    for (int i = 0; i < (1 << n); i++) {
-        int ones = 0;
-        for (int j = 0; j < n; j++) {
-            if ((i >> j) & 1) ones++;
-        }
-        if (ones == k) {
-            for (int j = 0; j < n; j++) res[*count][j] = (i >> j) & 1;
-            (*count)++;
-        }
-    }
-}
-
-// Coeficiente binomial
-int nCr(int n, int r) {
-    if (r > n || r < 0) return 0;
-    if (r == 0 || r == n) return 1;
-    if (r > n / 2) r = n - r;
-    long res = 1;
-    for (int i = 1; i <= r; ++i) res = res * (n - i + 1) / i;
-    return (int)res;
-}
-
-// Recursión para el producto cartesiano de todos los bloques
-void expandir_recursivo(int bloque, int L, int C, int *pesos, uint8_t ***tablas, int *indices, FILE *f) {
-    if (bloque == L) {
-        for (int m = 0; m < C; m++) {
-            for (int b = 0; b < L; b++) fprintf(f, "%u", tablas[b][indices[b]][m]);
-        }
-        fprintf(f, "\n");
-        return;
-    }
-    int num = nCr(C, pesos[bloque]);
-    for (int i = 0; i < num; i++) {
-        indices[bloque] = i;
-        expandir_recursivo(bloque + 1, L, C, pesos, tablas, indices, f);
-    }
-}
-
-
-
-
-// Modificamos ligeramente procesar_linea para que devuelva el número de combinaciones generadas
-long procesar_linea(int *pesos, int L, int C, FILE *f_out) {
-    uint8_t ***tablas = malloc(L * sizeof(uint8_t **));
-    long combinaciones_esta_linea = 1;
-
-    for (int b = 0; b < L; b++) {
-        int num = nCr(C, pesos[b]);
-        combinaciones_esta_linea *= num; // Multiplicamos las posibilidades de cada bloque
-        tablas[b] = malloc(num * sizeof(uint8_t *));
-        for (int i = 0; i < num; i++) tablas[b][i] = malloc(C);
-        int cnt = 0;
-        generar_sub_combs(C, pesos[b], tablas[b], &cnt);
-    }
-
-    int *indices = malloc(L * sizeof(int));
-    expandir_recursivo(0, L, C, pesos, tablas, indices, f_out);
-    
-    // Limpieza
-    for (int b = 0; b < L; b++) {
-        for (int i = 0; i < nCr(C, pesos[b]); i++) free(tablas[b][i]);
-        free(tablas[b]);
-    }
-    free(tablas); 
-    free(indices);
-
-    return combinaciones_esta_linea;
-}
-// Función auxiliar para verificar si ya procesamos estos pesos
-bool ya_procesado(int *pesos, int L, int **vistos, int *num_vistos) {
-    for (int i = 0; i < *num_vistos; i++) {
-        bool coinciden = true;
-        for (int j = 0; j < L; j++) {
-            if (vistos[i][j] != pesos[j]) {
-                coinciden = false;
-                break;
-            }
-        }
-        if (coinciden) return true;
-    }
-    return false;
-}
-
-void descomprimir(int N, int C) {
-    FILE *f_in = fopen(PATH_COMP_LP, "r");
-    FILE *f_out = fopen(PATH_COMBINATIONS, "w");
-    int L = (N / C);
-    
-    if (!f_in || !f_out) {
-        if (f_in) fclose(f_in);
-        if (f_out) fclose(f_out);
-        return;
-    }
-
-    int *pesos = malloc(L * sizeof(int));
-    long total_descomprimidos = 0;
-    
-    // Registro de pesos vistos (ajusta la capacidad según necesites)
-    int capacidad_vistos = 1000;
-    int num_vistos = 0;
-    int **vistos = malloc(capacidad_vistos * sizeof(int *));
-
-    // El archivo comp_lp tiene pares, pero fscanf saltará los espacios
-    // leeremos número a número.
-    while (1) {
-        int leidos = 0;
-        for (int i = 0; i < L; i++) {
-            if (fscanf(f_in, "%d", &pesos[i]) == 1) {
-                leidos++;
-            }
-        }
-
-        if (leidos == L) {
-            // COMPROBACIÓN: ¿Es la primera vez que vemos este grupo de pesos?
-            if (!ya_procesado(pesos, L, vistos, &num_vistos)) {
-                
-                // 1. Guardar en el registro de vistos
-                if (num_vistos >= capacidad_vistos) {
-                    capacidad_vistos *= 2;
-                    vistos = realloc(vistos, capacidad_vistos * sizeof(int *));
-                }
-                vistos[num_vistos] = malloc(L * sizeof(int));
-                memcpy(vistos[num_vistos], pesos, L * sizeof(int));
-                num_vistos++;
-
-                // 2. Descomprimir solo si es nuevo
-                total_descomprimidos += procesar_linea(pesos, L, C, f_out);
-            }
-        } else {
-            break; 
-        }
-    }
-
-    // Limpieza de memoria local
-    for (int i = 0; i < num_vistos; i++) free(vistos[i]);
-    free(vistos);
-    free(pesos);
-    
-    fclose(f_in);
-    fclose(f_out);
-
-    printf("Descompresion finalizada. Unicos procesados: %d. Total vectores en %s: %ld\n", 
-            num_vistos, PATH_COMBINATIONS, total_descomprimidos);
-}
-/* Versión optimizada para memoria: Lee de archivo en lugar de estructura */
-int save_dft_from_file(size_t N) {
-    
-    double constant = (double)(N + 1) / 2.0;
-    FILE *f_in = fopen(PATH_COMBINATIONS, "r");
-    FILE *file1 = fopen(PATH_DFT, "w");
-    FILE *file2 = fopen(PATH_CTEDFT, "w");
-    
-    if (!f_in || !file1 || !file2) {
-        fprintf(stderr, "ERROR: no se pudo abrir los archivos\n");
-        if (f_in) fclose(f_in);
-        if (file1) fclose(file1);
-        if (file2) fclose(file2);
-        return 0;
-    }
-    
-    double complex *time_domain = (double complex*)malloc(N * sizeof(double complex));
-    double complex *freq_domain = (double complex*)malloc(N * sizeof(double complex));
-    char *line_buffer = (char*)malloc(N + 2); // Buffer para leer cada línea binaria
-
-    if (!time_domain || !freq_domain || !line_buffer) {
-        fprintf(stderr, "ERROR: sin memoria para buffers de DFT\n");
-        fclose(f_in); fclose(file1); fclose(file2);
-        return 0;
-    }
-    
-    // Leemos el archivo combinations.txt línea a línea
-    while (fgets(line_buffer, N + 2, f_in)) {
-        // Ignorar líneas vacías o incompletas
-        if (strlen(line_buffer) < N) continue;
-
-        // Convertir caracteres '0'/'1' a complejo (0 -> 1.0, 1 -> 0.0)
-        for (size_t i = 0; i < N; i++) {
-            time_domain[i] = (line_buffer[i] == '0') ? 1.0 + 0.0*I : 0.0 + 0.0*I;
-        }
-
-        // Calcular DFT
+        // 3. Transformada de Fourier
+        binary_to_complex(vector_bits, time_domain, N);
         dft(time_domain, freq_domain, N);
-        
-        // Escribir en primer fich: módulo redondeado
-        for (size_t j = 1; j < N; j++) {
-            double modulo = pow(cabs(freq_domain[j]), 2);
-            double rounded = rint(modulo);
-            fprintf(file1, "%.0f%s", rounded, (j + 1 < N) ? " " : "");
-        }
-        fprintf(file1, "\n");
-        
-        // Escribir en segundo fich: constante - módulo redondeado
-        for (size_t j = 1; j < N; j++) {
-            double modulo = pow(cabs(freq_domain[j]), 2);
-            double rounded = rint(modulo);
-            double transformed = constant - rounded;
-            fprintf(file2, "%.0f%s", rint(transformed), (j + 1 < N) ? " " : "");
-        }
-        fprintf(file2, "\n");
-    }
-    
-    free(time_domain);
-    free(freq_domain);
-    free(line_buffer);
-    fclose(f_in);
-    fclose(file1);
-    fclose(file2);
 
-    printf("Procesamiento DFT y cte-DFT finalizado\n");
-    return 1;
+        // 4. Calcular PSD y evaluar el máximo
+        double max_psd = -1.0;
+        for (size_t j = 1; j < N; j++) { // Empezamos en 1 para omitir componente DC
+            current_psd[j] = rint(pow(cabs(freq_domain[j]), 2));
+            if (current_psd[j] > max_psd) {
+                max_psd = current_psd[j];
+            }
+        }
+
+        // ==========================================================
+        // SI SE CUMPLE: Max(PSD) < (N + 1) / 2
+        // ==========================================================
+        if (max_psd < threshold) {
+            matches_found++;
+
+            // Guardar en combinations.txt
+            for (size_t j = 0; j < N; j++) fprintf(f_comb, "%u", vector_bits[j]);
+            fprintf(f_comb, "\n");
+
+            // Guardar en dft.txt (PSD) y cte-dft.txt (N+1/2 - PSD)
+            for (size_t j = 1; j < N; j++) {
+                fprintf(f_psd, "%.0f%s", current_psd[j], (j + 1 < N) ? " " : "");
+                
+                double transformed = rint(constant - current_psd[j]);
+                fprintf(f_cte, "%.0f%s", transformed, (j + 1 < N) ? " " : "");
+            }
+            fprintf(f_psd, "\n");
+            fprintf(f_cte, "\n");
+        }
+
+        // Liberar el vector de esta iteración para mantener la RAM limpia
+        free(vector_bits);
+    }
+
+    // Cierre y limpieza
+    fclose(f_comb); fclose(f_psd); fclose(f_cte);
+    free(time_domain); free(freq_domain); free(combination); free(current_psd);
+
+    printf("\n=== PROCESO FINALIZADO ===\n");
+    printf("Vectores que cumplen la condicion: %zu\n", matches_found);
+    printf("Resultados guardados en los ficheros .txt\n");
+}
+
+int gcd(int a, int b)
+{
+    int temp;
+    while (b != 0)
+    {
+        temp = a % b;
+
+        a = b;
+        b = temp;
+    }
+    return a;
 }
 
 int main(void) {
-
-    clock_t start_time = clock();
-
-    size_t N = 45;//15
-    size_t k = 4;//2
-    size_t C = 15;//3
-    size_t L =N/C;
-    printf("N=%zu k=%zu C=%zu L=%zu\n\n", N, k, C, L);
-
-    // 1. Generar los cosets para el espacio comprimido
-    CosetList cl_comprimida = cyclotomic_cosets(k, L);
-
-    // 2. Generar todas las combinaciones de pesos (0 a C) que cumplen la simetría de cosets
-    generar_opciones_comprimidas(N, C, &cl_comprimida);
-
-    // 3. Calcular la DFT de esas opciones comprimidas y guardarlas
-    analizar_cosets_comprimidos(N, k, C);
-
-    // 4. Buscar qué pares de magnitudes suman el objetivo y guardarlos en comp_lp.txt
-    buscar_pares_complementarios(N, C);
-
-    // 5. Expandir esos pares de pesos a sus combinaciones binarias finales (0s y 1s)
-    descomprimir(N, C);
-
-    // 6. Guardar DFTS de las combinaciones y cte-DFT
-    save_dft_from_file(N);
-    
-    // 7. Buscar pares de las combinaciones y cte-DFT
-    find_matches_files();
-
-
-    //PARA MEJORAR HABRIA QUE HACER QUE LOS PARES COMPLEMENTARIOS NO SE REPITIESEN
-
-    // Limpieza final
-    free_cosetlist(&cl_comprimida);
-
-
-    clock_t end_time = clock();
-    double cpu_time_used = ((double) (end_time - start_time)) / CLOCKS_PER_SEC;
-    printf("TIEMPO TOTAL DE PROCESAMIENTO: %.3f segundos\n", cpu_time_used);
-    printf("\nFIN");
+    size_t N = 75;
+    size_t k;
+    int tamanos[N];
+    for (size_t i = 0; i < N; i++) {
+        tamanos[i] = -1;
+    }
+    for (size_t k = 2; k<N; k++) {
+        if (gcd(N, k) == 1) {
+            CosetList cl = cyclotomic_cosets(k, N);
+            tamanos[k] = cl.len;
+            free_cosetlist(&cl);
+        }
+    }
+    for (size_t minimo_size = 2; minimo_size < N-2; minimo_size++) {
+        for (int k=2; k<N; k++){
+            if (tamanos[k]==minimo_size){
+                printf("k=%d tiene %d cosets\n",k,tamanos[k]);
+                printf("N=%d k=%d\n\n",N,k);
+                CosetList cl = cyclotomic_cosets(k, N);
+                //cosetlist_print(&cl);
+                process_and_filter_vectors(&cl, N);
+                free_cosetlist(&cl);
+            }
+        }
+    }
+    printf("===FIN===");
     getchar();
     return 0;
 }
