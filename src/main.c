@@ -555,7 +555,7 @@ int gcd(int a, int b)
 }
 
 int main(void) {
-    size_t N = 75;
+    size_t N = 99;
     size_t k;
     int tamanos[N];
     for (size_t i = 0; i < N; i++) {
