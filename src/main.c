@@ -79,7 +79,7 @@ uint8_t* generate_vector_for_combination(const CosetList *cl,
     
     return vector;
 }
-
+// Hagamos otra función
 
 
 /* Genera todos los vectores basados en combinaciones de cosets */
