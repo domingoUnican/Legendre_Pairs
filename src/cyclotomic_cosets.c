@@ -2,6 +2,7 @@
 /* cyclotomic_cosets.c */
 #include "cyclotomic_cosets.h"
 #include <stdio.h>
+#include <stddef.h>  /* para size_t */
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdbool.h>

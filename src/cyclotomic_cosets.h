@@ -1,6 +1,6 @@
 #ifndef CYCLOTOMIC_COSETS_H
 #define CYCLOTOMIC_COSETS_H
-
+#include <stddef.h>  // size_t
 #include <stdint.h>
 #include <stdbool.h>
 
