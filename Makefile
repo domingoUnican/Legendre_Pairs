@@ -8,7 +8,7 @@ BIN     := $(BUILD)/app
 OBJS := $(BUILD)/cyclotomic_cosets.o $(BUILD)/mymath.o $(BUILD)/main.o
 
 $(BIN): $(OBJS)
-	$(CC) $(OBJS) -o $@
+	$(CC) $(OBJS) -o $@ -lm
 
 $(BUILD)/%.o: $(SRC)/%.c | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
