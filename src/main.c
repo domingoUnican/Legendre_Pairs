@@ -815,7 +815,7 @@ void process_and_filter_vectors_dfs(const CosetList *cl, size_t N) {
 }
 
 int main(void) {
-    size_t N = 45;
+    size_t N = 99;
     size_t k;
     int tamanos[N];
     
