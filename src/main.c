@@ -1,4 +1,3 @@
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -554,10 +553,272 @@ int gcd(int a, int b)
     return a;
 }
 
+typedef struct {
+    FILE *f_comb;
+    FILE *f_psd;
+    FILE *f_cte;
+    size_t matches_found;
+    double threshold;
+    double constant;
+    double complex **dft_matrix;
+    int **psd_matrix;
+    size_t N;
+    size_t num_cosets;
+    double complex *current_dft;
+    int *current_psd;
+    int *bound_psd;
+} DFSContext;
+
+/* DFS recursivo para explorar combinaciones de cosets */
+void dfs_explore_combinations(
+    const CosetList *cl,
+    uint8_t *current_combination,
+    size_t coset_idx,
+    DFSContext *ctx
+) {
+    // Caso base: hemos asignado todos los cosets
+    if (coset_idx == cl->len) {
+        // Calcular PSD y máximo
+        int max_psd = -1;
+        //printf("Psd:\n");
+        for (size_t j = 1; j < ctx->N; j++) {
+            int psd_val = (int)rint(pow(cabs(ctx->current_dft[j]), 2));
+            //printf("%d ", psd_val);
+            if (psd_val > max_psd) {
+                max_psd = psd_val;
+            }
+        }
+        
+        // PODA: Si cumple la condición, guardar
+        if (max_psd <= (int)ctx->threshold) {
+            ctx->matches_found++;
+            /*for (size_t j = 0; j < cl->len; j++) {
+                printf("%u", current_combination[j]);
+            //}
+            printf(" -> Max PSD: %d\n", max_psd);
+            printf("Vector bits: ");*/
+            uint8_t *vector_bits = generate_vector_for_combination(cl, current_combination, ctx->N);            
+            /*for (size_t j = 0; j < ctx->N; j++) {
+                printf("%u", vector_bits[j]);
+            //}
+            printf("\n");*/
+            // Guardar vector binario
+            for (size_t j = 0; j < ctx->N; j++) {
+                fprintf(ctx->f_comb, "%u", vector_bits[j]);
+            }
+            fprintf(ctx->f_comb, "\n");
+            
+            // Guardar PSD y transformación
+            for (size_t j = 1; 2 * j < ctx->N; j++) {
+                int psd_val = (int)rint(pow(cabs(ctx->current_dft[j]), 2));
+                fprintf(ctx->f_psd, "%d%s", psd_val, (j + 1 < ctx->N) ? " " : "");
+                
+                int transformed = (int)rint(ctx->constant - psd_val);
+                fprintf(ctx->f_cte, "%d%s", transformed, (j + 1 < ctx->N) ? " " : "");
+            }
+            fprintf(ctx->f_psd, "\n");
+            fprintf(ctx->f_cte, "\n");
+            
+            free(vector_bits);
+        }
+        return;
+    }
+    
+    // Rama 1: No incluir el coset actual (valor 0)
+    // Calcular cota PARA CADA POSICIÓN j
+    int max_diff_1 = -1;
+    for (size_t j = 1; j < ctx->N; j++) {
+        // Suma de PSD de cosets restantes en la posición j
+        int bound_remaining_j = 0;
+        for (size_t i = coset_idx; i < ctx->num_cosets; i++) {
+            bound_remaining_j += ctx->psd_matrix[i][j];
+        }
+        // Diferencia para esta posición
+        int diff = ctx->current_psd[j] - bound_remaining_j;
+        if (max_diff_1 < diff) {
+            max_diff_1 = diff;
+        }
+    }
+    
+    if (max_diff_1 <= (int)ctx->threshold) {
+        /*         printf("Entra por 0 en el %zu:\n", coset_idx);
+        for (size_t prueba = 0; prueba < ctx->num_cosets; prueba++) {
+            printf("%u", current_combination[prueba]);
+        }
+        printf("\n"); */
+        current_combination[coset_idx] = 0;
+        dfs_explore_combinations(cl, current_combination, coset_idx + 1, ctx);
+    }
+    
+    // Rama 2: Incluir el coset actual (valor 1)
+    for (size_t j = 1; j < ctx->N; j++) {
+        ctx->current_dft[j] = ctx->current_dft[j] + ctx->dft_matrix[coset_idx][j];
+        ctx->current_psd[j] = (int)rint(pow(cabs(ctx->current_dft[j]), 2));
+    }
+    
+    // Nueva cota PARA CADA POSICIÓN j (excluyendo el coset actual)
+    int max_diff_2 = -1;
+    for (size_t j = 1; j < ctx->N; j++) {
+        // Suma de PSD de cosets restantes (después del actual) en la posición j
+        int bound_remaining_2_j = 0;
+        for (size_t i = coset_idx + 1; i < ctx->num_cosets; i++) {
+            bound_remaining_2_j += ctx->psd_matrix[i][j];
+        }
+        // Diferencia para esta posición
+        int diff = ctx->current_psd[j] - bound_remaining_2_j;
+        if (max_diff_2 < diff) {
+            max_diff_2 = diff;
+        }
+    }
+    
+    if (max_diff_2 <= (int)ctx->threshold) {
+        //printf("Entra por 1 en el coset %zu.\n", coset_idx);
+        current_combination[coset_idx] = 1;     
+        /*for (size_t prueba = 0; prueba < ctx->num_cosets; prueba++) {
+            printf("%u", current_combination[prueba]);
+        
+        printf("\n");*/
+
+        dfs_explore_combinations(cl, current_combination, coset_idx + 1, ctx);
+        current_combination[coset_idx] = 0;
+    }
+    
+    // Retroceso: deshacer cambios
+    for (size_t j = 1; j < ctx->N; j++) {
+        ctx->current_dft[j] = ctx->current_dft[j] - ctx->dft_matrix[coset_idx][j];
+        ctx->current_psd[j] = (int)rint(pow(cabs(ctx->current_dft[j]), 2));
+    }
+}
+
+/* Versión DFS del procesamiento */
+void process_and_filter_vectors_dfs(const CosetList *cl, size_t N) {
+    if (!cl || cl->len == 0) return;
+
+    double threshold = ((double)N + 1.0) / 2.0;
+    double constant = ((double)N + 1.0) / 2.0;
+    
+    // Asignar matrices dinámicamente (OPCIÓN 1: Recomendada)
+    double complex **dft_matrix = malloc(cl->len * sizeof(double complex *));
+    int **psd_matrix = malloc(cl->len * sizeof(int *));
+    
+    for (size_t i = 0; i < cl->len; i++) {
+        dft_matrix[i] = malloc(N * sizeof(double complex));
+        psd_matrix[i] = malloc(N * sizeof(int));
+    }
+    
+    double complex *time_domain = malloc(N * sizeof(double complex));
+    double complex *freq_domain = malloc(N * sizeof(double complex));
+    int *current_psd = malloc(N * sizeof(int));
+    int *bound_psd = malloc(N * sizeof(int));
+    double complex *current_dft = malloc(N * sizeof(double complex));
+    uint8_t *combination = malloc(cl->len * sizeof(uint8_t));
+    
+    // Inicializar
+    for (size_t i = 0; i < cl->len; i++) {
+        combination[i] = 0;
+    }
+    for (size_t j = 0; j < N; j++) {
+        current_dft[j] = 0.0 + 0.0*I;
+        current_psd[j] = 0;
+        bound_psd[j] = 0;
+    }
+    //printf("El valor de cl->len es: %zu\n", cl->len);
+    // Calcular DFT y PSD para cada coset
+    for (size_t i = 0; i < cl->len; i++) {
+        combination[i] = 1;
+        uint8_t *vector_bits = generate_vector_for_combination(cl, combination, N);
+        for (size_t j = 0; j < N; j++) {
+            printf("%u", vector_bits[j]);
+        }
+        //printf("\n Vector generado para el coset %zu\n", i);
+        binary_to_complex(vector_bits, time_domain, N);
+        dft(time_domain, freq_domain, N);
+        
+        for (size_t j = 0; j < N; j++) {
+            dft_matrix[i][j] = freq_domain[j];
+            psd_matrix[i][j] = (int)rint(pow(cabs(freq_domain[j]), 2));
+            bound_psd[j] += psd_matrix[i][j];
+        }
+        free(vector_bits);
+        combination[i] = 0;
+    }
+    
+    free(time_domain);
+    free(freq_domain);
+    
+    // Abrir archivos
+    FILE *f_comb = fopen("combinations.txt", "a");
+    FILE *f_psd = fopen("dft.txt", "a");
+    FILE *f_cte = fopen("cte-dft.txt", "a");
+
+    if (!f_comb || !f_psd || !f_cte) {
+        printf("ERROR: No se pudieron abrir los archivos.\n");
+        if (f_comb) fclose(f_comb);
+        if (f_psd) fclose(f_psd);
+        if (f_cte) fclose(f_cte);
+        
+        // Limpiar memoria antes de salir
+        for (size_t i = 0; i < cl->len; i++) {
+            free(dft_matrix[i]);
+            free(psd_matrix[i]);
+        }
+        free(dft_matrix);
+        free(psd_matrix);
+        free(current_dft);
+        free(current_psd);
+        free(bound_psd);
+        free(combination);
+        return;
+    }
+
+    // Preparar contexto
+    DFSContext ctx = {
+        .f_comb = f_comb,
+        .f_psd = f_psd,
+        .f_cte = f_cte,
+        .matches_found = 0,
+        .threshold = threshold,
+        .constant = constant,
+        .N = N,
+        .num_cosets = cl->len,
+        .dft_matrix = dft_matrix,
+        .psd_matrix = psd_matrix,
+        .current_dft = current_dft,
+        .current_psd = current_psd,
+        .bound_psd = bound_psd
+    };
+
+    printf("=== EXPLORACIÓN DFS (N=%zu, cosets=%zu) ===\n", N, cl->len);
+    printf("Condicion: Max(PSD) < %.2f\n\n", threshold);
+
+    // Iniciar DFS desde coset 0
+    dfs_explore_combinations(cl, combination, 0, &ctx);
+    
+    // Limpieza completa de memoria
+    for (size_t i = 0; i < cl->len; i++) {
+        free(dft_matrix[i]);
+        free(psd_matrix[i]);
+    }
+    free(dft_matrix);
+    free(psd_matrix);
+    free(current_dft);
+    free(current_psd);
+    free(bound_psd);
+    free(combination);
+    
+    fclose(f_comb);
+    fclose(f_psd);
+    fclose(f_cte);
+
+    printf("\n=== EXPLORACIÓN FINALIZADA ===\n");
+    printf("Vectores encontrados: %zu\n\n", ctx.matches_found);
+}
+
 int main(void) {
-    size_t N = 99;
+    size_t N = 45;
     size_t k;
     int tamanos[N];
+    
     for (size_t i = 0; i < N; i++) {
         tamanos[i] = -1;
     }
@@ -568,14 +829,15 @@ int main(void) {
             free_cosetlist(&cl);
         }
     }
-    for (size_t minimo_size = 2; minimo_size < N-2; minimo_size++) {
+    for (size_t minimo_size = 2; minimo_size < N-1; minimo_size++) {
         for (int k=2; k<N; k++){
             if (tamanos[k]==minimo_size){
                 printf("k=%d tiene %d cosets\n",k,tamanos[k]);
                 printf("N=%d k=%d\n\n",N,k);
                 CosetList cl = cyclotomic_cosets(k, N);
-                //cosetlist_print(&cl);
-                process_and_filter_vectors(&cl, N);
+                printf("Número de cosets: %zu\n", cl.len);
+                // Usar versión DFS en lugar de la iterativa
+                process_and_filter_vectors_dfs(&cl, N);
                 free_cosetlist(&cl);
             }
         }
