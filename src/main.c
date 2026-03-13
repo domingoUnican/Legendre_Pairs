@@ -271,6 +271,66 @@ int save_vectors(const CosetVectors *cv, const char *filename) {
     return 1;
 }
 
+static void legendre_sequence(int p,  uint8_t *sequence)
+{
+    sequence[0] = 5;
+    for (int n = 1; n < p; n++) {
+        uint8_t legendre_symbol = 3;
+        for (int k = 1; k <= (p - 1) / 2; k++) {
+            if ((n % p) == (k * k % p)) {
+                legendre_symbol = 6;
+                break;
+            }
+        }
+        sequence[n] = legendre_symbol;
+    }
+}
+
+
+
+bool is_compression(int N, int p, uint8_t *sequence, uint8_t *compressed)
+{
+    int temp[p];
+    for (int i = 0; i < p; i++) {
+        temp[i] = compressed[i];
+    }
+    for (int i = 0; i < p; i++)
+    {
+        for (int j = 0; p * j < N; j++)
+        {
+            temp[i] -= sequence[(i + p * j) % N];
+        }
+        if (temp[i] != 0)
+        {
+            return false;
+        }
+    }
+    return true;
+
+}
+
+bool is_less_than_compression(int N, int p,uint8_t *sequence, uint8_t *compressed, uint8_t *bound_sequence)
+{
+    uint16_t temp;
+    uint16_t temp_bound;
+    for (int i = 0; i < p; i++)
+    {
+        temp = compressed[i];
+        temp_bound = 0;
+        for (int j = 0; p * j < N; j++)
+        {
+            temp -= sequence[(i + p * j) % N];
+            temp_bound += bound_sequence[(i + p * j) % N];
+        }
+        if (temp < 0 )
+        {
+            return false;
+        }
+    }
+    return true;
+
+}
+
 /* Convierte vector binario a complejo (-1/+1) */
 static void binary_to_complex(const uint8_t *binary, double complex *complex_arr, size_t N) {
     for (size_t i = 0; i < N; i++) {
@@ -567,37 +627,88 @@ typedef struct {
     double complex *current_dft;
     int *current_psd;
     int *bound_psd;
+    uint8_t *compression_a;
+    uint8_t *compression_b;
+    int p;
+    int coset_idx;
+    CosetList *cl;
+    uint8_t *current_combination;
 } DFSContext;
+
+bool check_bound(const DFSContext *ctx) {
+    uint8_t *vector_bits = generate_vector_for_combination(ctx->cl, ctx->current_combination, ctx->N);
+    uint8_t *temp0 = malloc(ctx->cl->len * sizeof(uint8_t));
+    for (size_t j = ctx->coset_idx; j < ctx->cl->len; j++) {
+        temp0[j] = 1;
+    }
+    uint8_t *temp1 = generate_vector_for_combination(ctx->cl, temp0, ctx->N);
+    if  ( !is_less_than_compression(ctx->N, ctx->p, vector_bits, ctx->compression_a, temp1))
+    {
+        if (!is_less_than_compression(ctx->N, ctx->p, vector_bits, ctx->compression_b, temp1)) {
+            free(vector_bits);
+            free(temp1);
+            free(temp0);
+            return false;
+        }
+    }
+    free(vector_bits);
+    free(temp1);
+    free(temp0);
+    /*if ( !is_less_compression_a && !is_less_compression_b) {
+        return false;
+    }*/
+    int max_diff = -1;
+    for (size_t j = 1; j < ctx->N; j++) {
+        int bound_remaining_j = 0;
+        size_t start_idx =  ctx->coset_idx + 1;
+        for (size_t i = start_idx; i < ctx->num_cosets; i++) {
+            bound_remaining_j += ctx->psd_matrix[i][j];
+        }
+        int diff = ctx->current_psd[j] - bound_remaining_j;
+        if (diff > max_diff) {
+            max_diff = diff;
+        }
+    }
+    return max_diff <= (int)ctx->threshold;
+}
+
+bool is_valid_combination(const DFSContext *ctx) {
+    uint8_t *vector_bits = generate_vector_for_combination(ctx->cl, ctx->current_combination, ctx->N);
+    uint8_t temp[ctx->N];
+    for (size_t j = 0; j < ctx->N; j++) {
+        temp[j] = vector_bits[j];
+    }
+    free(vector_bits);
+    bool is_compressed = is_compression(ctx->N, ctx->p, temp, ctx->compression_a);
+    if (is_compressed ||  is_compression(ctx->N, ctx->p, temp, ctx->compression_b)){
+        int max_psd = -1;
+        for (size_t j = 1; j < ctx->N; j++) {
+            if (ctx->current_psd[j] > max_psd) {
+                max_psd = ctx->current_psd[j];
+            }
+        }
+        return max_psd <= (int)ctx->threshold;
+    }
+    return false;
+}
 
 /* DFS recursivo para explorar combinaciones de cosets */
 void dfs_explore_combinations(
-    const CosetList *cl,
-    uint8_t *current_combination,
-    size_t coset_idx,
     DFSContext *ctx
 ) {
     // Caso base: hemos asignado todos los cosets
-    if (coset_idx == cl->len) {
-        // Calcular PSD y máximo
-        int max_psd = -1;
-        //printf("Psd:\n");
-        for (size_t j = 1; j < ctx->N; j++) {
-            int psd_val = (int)rint(pow(cabs(ctx->current_dft[j]), 2));
-            //printf("%d ", psd_val);
-            if (psd_val > max_psd) {
-                max_psd = psd_val;
-            }
-        }
+    if (ctx->coset_idx == ctx->cl->len) {
+        
         
         // PODA: Si cumple la condición, guardar
-        if (max_psd <= (int)ctx->threshold) {
+        if (is_valid_combination(ctx)) {
             ctx->matches_found++;
             /*for (size_t j = 0; j < cl->len; j++) {
                 printf("%u", current_combination[j]);
             //}
             printf(" -> Max PSD: %d\n", max_psd);
             printf("Vector bits: ");*/
-            uint8_t *vector_bits = generate_vector_for_combination(cl, current_combination, ctx->N);            
+            uint8_t *vector_bits = generate_vector_for_combination(ctx->cl, ctx->current_combination, ctx->N);            
             /*for (size_t j = 0; j < ctx->N; j++) {
                 printf("%u", vector_bits[j]);
             //}
@@ -625,73 +736,46 @@ void dfs_explore_combinations(
     }
     
     // Rama 1: No incluir el coset actual (valor 0)
-    // Calcular cota PARA CADA POSICIÓN j
-    int max_diff_1 = -1;
-    for (size_t j = 1; j < ctx->N; j++) {
-        // Suma de PSD de cosets restantes en la posición j
-        int bound_remaining_j = 0;
-        for (size_t i = coset_idx; i < ctx->num_cosets; i++) {
-            bound_remaining_j += ctx->psd_matrix[i][j];
-        }
-        // Diferencia para esta posición
-        int diff = ctx->current_psd[j] - bound_remaining_j;
-        if (max_diff_1 < diff) {
-            max_diff_1 = diff;
-        }
-    }
     
-    if (max_diff_1 <= (int)ctx->threshold) {
+    if (check_bound(ctx)) {
         /*         printf("Entra por 0 en el %zu:\n", coset_idx);
         for (size_t prueba = 0; prueba < ctx->num_cosets; prueba++) {
             printf("%u", current_combination[prueba]);
         }
         printf("\n"); */
-        current_combination[coset_idx] = 0;
-        dfs_explore_combinations(cl, current_combination, coset_idx + 1, ctx);
+        ctx->current_combination[ctx->coset_idx] = 0;
+        ctx->coset_idx++;
+        dfs_explore_combinations(ctx);
+        ctx->coset_idx--;
     }
     
     // Rama 2: Incluir el coset actual (valor 1)
     for (size_t j = 1; j < ctx->N; j++) {
-        ctx->current_dft[j] = ctx->current_dft[j] + ctx->dft_matrix[coset_idx][j];
+        ctx->current_dft[j] = ctx->current_dft[j] + ctx->dft_matrix[ctx->coset_idx][j];
         ctx->current_psd[j] = (int)rint(pow(cabs(ctx->current_dft[j]), 2));
     }
     
-    // Nueva cota PARA CADA POSICIÓN j (excluyendo el coset actual)
-    int max_diff_2 = -1;
-    for (size_t j = 1; j < ctx->N; j++) {
-        // Suma de PSD de cosets restantes (después del actual) en la posición j
-        int bound_remaining_2_j = 0;
-        for (size_t i = coset_idx + 1; i < ctx->num_cosets; i++) {
-            bound_remaining_2_j += ctx->psd_matrix[i][j];
-        }
-        // Diferencia para esta posición
-        int diff = ctx->current_psd[j] - bound_remaining_2_j;
-        if (max_diff_2 < diff) {
-            max_diff_2 = diff;
-        }
-    }
-    
-    if (max_diff_2 <= (int)ctx->threshold) {
+    if (check_bound(ctx)) {
         //printf("Entra por 1 en el coset %zu.\n", coset_idx);
-        current_combination[coset_idx] = 1;     
+        ctx->current_combination[ctx->coset_idx] = 1;     
         /*for (size_t prueba = 0; prueba < ctx->num_cosets; prueba++) {
             printf("%u", current_combination[prueba]);
         
         printf("\n");*/
-
-        dfs_explore_combinations(cl, current_combination, coset_idx + 1, ctx);
-        current_combination[coset_idx] = 0;
+        ctx->coset_idx++;
+        dfs_explore_combinations(ctx);
+        ctx->coset_idx--;
     }
     
     // Retroceso: deshacer cambios
     for (size_t j = 1; j < ctx->N; j++) {
-        ctx->current_dft[j] = ctx->current_dft[j] - ctx->dft_matrix[coset_idx][j];
+        ctx->current_dft[j] = ctx->current_dft[j] - ctx->dft_matrix[ctx->coset_idx][j];
         ctx->current_psd[j] = (int)rint(pow(cabs(ctx->current_dft[j]), 2));
     }
 }
 
 /* Versión DFS del procesamiento */
-void process_and_filter_vectors_dfs(const CosetList *cl, size_t N) {
+void process_and_filter_vectors_dfs(CosetList *cl, size_t N, int p) {
     if (!cl || cl->len == 0) return;
 
     double threshold = ((double)N + 1.0) / 2.0;
@@ -710,9 +794,20 @@ void process_and_filter_vectors_dfs(const CosetList *cl, size_t N) {
     double complex *freq_domain = malloc(N * sizeof(double complex));
     int *current_psd = malloc(N * sizeof(int));
     int *bound_psd = malloc(N * sizeof(int));
+    uint8_t *compression_a = malloc(p * sizeof(uint8_t));
+    uint8_t *compression_b = malloc(p * sizeof(uint8_t));
     double complex *current_dft = malloc(N * sizeof(double complex));
     uint8_t *combination = malloc(cl->len * sizeof(uint8_t));
-    
+    legendre_sequence(p, compression_a);
+    for (int i = 0; i < p; i++) {
+        if (compression_a[i] == 5) {
+            compression_b[i] = 5;
+        } else if (compression_a[i] == 3) {
+            compression_b[i] = 6;
+        } else if (compression_a[i] == 6) {
+            compression_b[i] = 3;
+        }
+    }
     // Inicializar
     for (size_t i = 0; i < cl->len; i++) {
         combination[i] = 0;
@@ -768,6 +863,8 @@ void process_and_filter_vectors_dfs(const CosetList *cl, size_t N) {
         free(current_psd);
         free(bound_psd);
         free(combination);
+        free(compression_a);
+        free(compression_b);
         return;
     }
 
@@ -780,19 +877,24 @@ void process_and_filter_vectors_dfs(const CosetList *cl, size_t N) {
         .threshold = threshold,
         .constant = constant,
         .N = N,
+        .p = p,
         .num_cosets = cl->len,
         .dft_matrix = dft_matrix,
         .psd_matrix = psd_matrix,
         .current_dft = current_dft,
         .current_psd = current_psd,
-        .bound_psd = bound_psd
+        .bound_psd = bound_psd,
+        .compression_a = compression_a,
+        .compression_b = compression_b,
+        .cl = cl, 
+        .current_combination = combination,
+        .coset_idx = 0
     };
 
     printf("=== EXPLORACIÓN DFS (N=%zu, cosets=%zu) ===\n", N, cl->len);
     printf("Condicion: Max(PSD) < %.2f\n\n", threshold);
-
     // Iniciar DFS desde coset 0
-    dfs_explore_combinations(cl, combination, 0, &ctx);
+    dfs_explore_combinations(&ctx);
     
     // Limpieza completa de memoria
     for (size_t i = 0; i < cl->len; i++) {
@@ -814,22 +916,24 @@ void process_and_filter_vectors_dfs(const CosetList *cl, size_t N) {
     printf("Vectores encontrados: %zu\n\n", ctx.matches_found);
 }
 
+
+
 int main(void) {
-    size_t N = 99;
+    int p = 5;
+    size_t N = (size_t)(9*p);
     size_t k;
     int tamanos[N];
-    
     for (size_t i = 0; i < N; i++) {
         tamanos[i] = -1;
     }
-    for (size_t k = 2; k<N; k++) {
+    for (size_t k = 1; k<N; k++) {
         if (gcd(N, k) == 1) {
             CosetList cl = cyclotomic_cosets(k, N);
             tamanos[k] = cl.len;
             free_cosetlist(&cl);
         }
     }
-    for (size_t minimo_size = 2; minimo_size < N-1; minimo_size++) {
+    for (size_t minimo_size = 1; minimo_size <= N; minimo_size++) {
         for (int k=2; k<N; k++){
             if (tamanos[k]==minimo_size){
                 printf("k=%d tiene %d cosets\n",k,tamanos[k]);
@@ -837,7 +941,7 @@ int main(void) {
                 CosetList cl = cyclotomic_cosets(k, N);
                 printf("Número de cosets: %zu\n", cl.len);
                 // Usar versión DFS en lugar de la iterativa
-                process_and_filter_vectors_dfs(&cl, N);
+                process_and_filter_vectors_dfs(&cl, N, p);
                 free_cosetlist(&cl);
             }
         }
