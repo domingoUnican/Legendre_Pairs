@@ -16,7 +16,7 @@ const char *PATH_DFT    = "dft.txt";                           // DFT de las com
 const char *PATH_CTEDFT     = "cte-dft.txt";                   // Constante - DFT de las combinaciones
 const char *PATH_LP    = "lp.txt";                             // LPS
 
-static void print_bits(const int *v, size_t n, const char *name) {
+static void print_bits(const uint8_t *v, size_t n, const char *name) {
     printf("%s = [", name);
     for (size_t i = 0; i < n; ++i) {
         printf("%u", (unsigned)v[i]);
@@ -25,7 +25,7 @@ static void print_bits(const int *v, size_t n, const char *name) {
     printf("]\n");
 }
 
-static void print_vector(const int *v, size_t n) {
+static void print_vector(const uint8_t *v, size_t n) {
     printf("[");
     for (size_t i = 0; i < n; i++) {
         printf("%u", (unsigned)v[i]);
@@ -37,8 +37,8 @@ static void print_vector(const int *v, size_t n) {
 
 /* Versión modificada de BinaryCombinations que genera vectores completos */
 typedef struct {
-    int **vectors;        // Array de vectores de longitud N
-    int **combinations;   // Array de combinaciones de cosets (para referencia)
+    uint8_t **vectors;        // Array de vectores de longitud N
+    uint8_t **combinations;   // Array de combinaciones de cosets (para referencia)
     size_t num_vectors;       // Número total de vectores (2^num_cosets)
     size_t vector_length;     // Longitud de cada vector (N)
     size_t num_cosets;        // Número de cosets
@@ -59,10 +59,10 @@ static int find_element_in_cosets(const CosetList *cl, size_t element) {
 
 
 /* Genera vector completo para una combinación dada de cosets */
-int* generate_vector_for_combination(const CosetList *cl, 
-                                        const int *combination, 
+uint8_t* generate_vector_for_combination(const CosetList *cl, 
+                                        const uint8_t *combination, 
                                         size_t N) {
-    int *vector = (int*)calloc(N, sizeof(int));
+    uint8_t *vector = (uint8_t*)calloc(N, sizeof(uint8_t));
     if (!vector) {
         fprintf(stderr, "ERROR: sin memoria para vector\n");
         return NULL;
@@ -83,9 +83,9 @@ int* generate_vector_for_combination(const CosetList *cl,
 // Hazme una funcion que devuelva una matriz de enteros 
 // donde cada fila sea un vector generado a partir de las combinaciones de cosets.
 
-int** PSD(const CosetVectors * cv, size_t N) {
+uint8_t** PSD(const CosetVectors * cv, size_t N) {
     double psd_total = 0.0;
-    int resultado[cv->num_vectors][N];
+    uint8_t resultado[cv->num_vectors][N];
     complex double dft_temp[N];
 
     for (size_t i = 0; i < cv->num_vectors; i++) {
@@ -125,8 +125,8 @@ CosetVectors* generate_coset_vectors(const CosetList *cl, size_t N) {
     result->vector_length = N;
     
     // Reservar memoria para combinaciones
-    result->combinations = (int**)malloc(result->num_vectors * sizeof(int*));
-    result->vectors = (int**)malloc(result->num_vectors * sizeof(int*));
+    result->combinations = (uint8_t**)malloc(result->num_vectors * sizeof(uint8_t*));
+    result->vectors = (uint8_t**)malloc(result->num_vectors * sizeof(uint8_t*));
     
     if (!result->combinations || !result->vectors) {
         fprintf(stderr, "ERROR: sin memoria para arrays\n");
@@ -137,13 +137,13 @@ CosetVectors* generate_coset_vectors(const CosetList *cl, size_t N) {
     }
     
     // Inicializar todo a NULL
-    memset(result->combinations, 0, result->num_vectors * sizeof(int*));
-    memset(result->vectors, 0, result->num_vectors * sizeof(int*));
+    memset(result->combinations, 0, result->num_vectors * sizeof(uint8_t*));
+    memset(result->vectors, 0, result->num_vectors * sizeof(uint8_t*));
     
     // Generar cada combinación y su vector correspondiente
     for (size_t i = 0; i < result->num_vectors; i++) {
         // 1. Generar combinación binaria para los cosets
-        result->combinations[i] = (int*)malloc(cl->len * sizeof(int));
+        result->combinations[i] = (uint8_t*)malloc(cl->len * sizeof(uint8_t));
         if (!result->combinations[i]) {
             fprintf(stderr, "ERROR: sin memoria para combination %zu\n", i);
             goto error_cleanup;
@@ -281,7 +281,7 @@ int save_vectors(const CosetVectors *cv, const char *filename) {
 }
 
 /* Convierte vector binario a complejo (-1/+1) */
-static void binary_to_complex(const int *binary, double complex *complex_arr, size_t N) {
+static void binary_to_complex(const uint8_t *binary, double complex *complex_arr, size_t N) {
     for (size_t i = 0; i < N; i++) {
         complex_arr[i] = (binary[i] == 0) ? 1.0 + 0.0*I : 0 + 0.0*I;
     }
@@ -735,7 +735,7 @@ void buscar_pares_complementarios(size_t N, size_t C) {
     fclose(f_out);
 }
 
-void generar_sub_combs(int n, int k, int **res, int *count) {
+void generar_sub_combs(int n, int k, uint8_t **res, int *count) {
     for (int i = 0; i < (1 << n); i++) {
         int ones = 0;
         for (int j = 0; j < n; j++) {
@@ -759,7 +759,7 @@ int nCr(int n, int r) {
 }
 
 // Recursión para el producto cartesiano de todos los bloques
-void expandir_recursivo(int bloque, int L, int C, int *pesos, int ***tablas, int *indices, FILE *f) {
+void expandir_recursivo(int bloque, int L, int C, int *pesos, uint8_t ***tablas, int *indices, FILE *f) {
     if (bloque == L) {
         for (int m = 0; m < C; m++) {
             for (int b = 0; b < L; b++) fprintf(f, "%u", tablas[b][indices[b]][m]);
@@ -779,13 +779,13 @@ void expandir_recursivo(int bloque, int L, int C, int *pesos, int ***tablas, int
 
 // Modificamos ligeramente procesar_linea para que devuelva el número de combinaciones generadas
 long procesar_linea(int *pesos, int L, int C, FILE *f_out) {
-    int ***tablas = malloc(L * sizeof(int **));
+    uint8_t ***tablas = malloc(L * sizeof(uint8_t **));
     long combinaciones_esta_linea = 1;
 
     for (int b = 0; b < L; b++) {
         int num = nCr(C, pesos[b]);
         combinaciones_esta_linea *= num; // Multiplicamos las posibilidades de cada bloque
-        tablas[b] = malloc(num * sizeof(int *));
+        tablas[b] = malloc(num * sizeof(uint8_t *));
         for (int i = 0; i < num; i++) tablas[b][i] = malloc(C);
         int cnt = 0;
         generar_sub_combs(C, pesos[b], tablas[b], &cnt);

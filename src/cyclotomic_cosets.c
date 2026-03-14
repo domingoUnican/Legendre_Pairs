@@ -72,7 +72,7 @@ CosetList cyclotomic_cosets(size_t k, size_t N) {
                 g);
     }
 
-    int *visited = (int*)calloc(N, sizeof(int));
+    uint8_t *visited = (uint8_t*)calloc(N, sizeof(uint8_t));
     if (!visited) {
         fprintf(stderr, "Error: sin memoria para 'visited'.\n");
         return res;
@@ -163,10 +163,10 @@ bool coset_is_subset_of(const Coset *a, const Coset *b) {
 }
 
 /* Devuelve vector de 0/1 indicando si 'c' está contenido en cada coset de 'cl'. */
-int* coset_membership_vector(const Coset *c, const CosetList *cl) {
+uint8_t* coset_membership_vector(const Coset *c, const CosetList *cl) {
     if (!cl || cl->len == 0) return NULL;
 
-    int *vec = (int*)malloc(cl->len * sizeof(int));
+    uint8_t *vec = (uint8_t*)malloc(cl->len * sizeof(uint8_t));
     if (!vec) {
         fprintf(stderr, "Error: sin memoria para vector de pertenencia.\n");
         return NULL;

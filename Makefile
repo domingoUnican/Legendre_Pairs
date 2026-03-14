@@ -1,11 +1,11 @@
 
 CC      := cc
-CFLAGS  := -std=c11  -O2 -Wall -Wextra -I./include
+CFLAGS  := -std=c11  -g -O0 -Wall -Wextra -I./include
 BUILD   := build
 SRC     := src
 BIN     := $(BUILD)/app
 
-OBJS := $(BUILD)/cyclotomic_cosets.o $(BUILD)/mymath.o $(BUILD)/main.o
+OBJS := $(BUILD)/cyclotomic_cosets.o $(BUILD)/mymath.o $(BUILD)/temporal.o
 
 $(BIN): $(OBJS)
 	$(CC) $(OBJS) -o $@ -lm

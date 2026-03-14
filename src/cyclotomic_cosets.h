@@ -57,7 +57,7 @@ bool coset_is_subset_of(const Coset *a, const Coset *b);
  * @param cl lista de cosets
  * @return vector de 0/1 (debe liberarse con free), NULL en error
  */
-int* coset_membership_vector(const Coset *c, const CosetList *cl);
+uint8_t* coset_membership_vector(const Coset *c, const CosetList *cl);
 
 
 #endif /* CYCLOTOMIC_COSETS_H */
