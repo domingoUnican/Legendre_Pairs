@@ -5,7 +5,7 @@
 #include "mymath.h"
 #include <complex.h>
 #include <math.h>
-
+#define ALFABET_SIZE 2
 
 int gcd(int a, int b)
 {
@@ -91,37 +91,14 @@ bool is_less_than_compression(int N, int p, const int *sequence, const int *comp
         }
         if (temp[i] > compressed[i] || temp_bound[i] + temp[i] < compressed[i]) 
         {
-            /*bool is_lesser = true;
-            for (int k = 0; k < 45; k++) {
-                is_lesser = is_lesser && (prueba[k] <= bound_sequence[k]);
-            }
-            if (is_lesser)
-            {
-                printf("La secuencia no es menor que la compresión, pero sí menor que el bound.\n");
-                for (int k = 0; k < 45; k++) {
-                    printf("%d ", sequence[k]);
-                }
-                printf("\n");
-                for (int k = 0; k < 45; k++) {
-                    printf("%d ", prueba[k]);
-                }
-                printf("\n");
-            }
-            printf("\nBound exceeded at index %d: temp = %d, comprosed=%d, bound = %d\n", i, temp[i], compressed[i], temp_bound[i]);
-            /*printf("Sequence: ");
-            for (int k = 0; k < N; k++) {
-                    printf("%d ", sequence[k]);
-                }
-            printf("\nBound Sequence: ");
-            for (int k = 0; k < N; k++) {
-                    printf("%d ", bound_sequence[k]);
-                }
-            printf("\n");*/
+            free(temp);
+            free(temp_bound);
             return false;
         }
     }
+    free(temp);
+    free(temp_bound);
     return true;
-
 }
 
 typedef struct {
@@ -191,7 +168,7 @@ bool check_bound(const DFSContext *ctx) {
     int max_diff = -1;
     for (size_t j = 1; j < ctx->N; j++) {
         int bound_remaining_j = 0;
-        size_t start_idx =  ctx->coset_idx + 1;
+        size_t start_idx =  ctx->coset_idx ;
         for (size_t i = start_idx; i < ctx->num_cosets; i++) {
             bound_remaining_j += ctx->psd_matrix[i][j];
         }
@@ -205,6 +182,7 @@ bool check_bound(const DFSContext *ctx) {
 
 bool is_valid_combination(const DFSContext *ctx) {
     int *vector_bits = generate_vector_for_combination(ctx->cl, ctx->current_combination, ctx->N);
+    
     int *temp= malloc(ctx->N * sizeof(int));
     for (size_t j = 0; j < ctx->N; j++) {
         temp[j] = vector_bits[j];
@@ -255,39 +233,22 @@ void dfs_explore_combinations( DFSContext *ctx)
         }
         return;
     }
-    
-    // Rama 1: No incluir el coset actual (valor 0)
-    
-    if (check_bound(ctx)) {
-
+    for (int alfabet_val = 0; alfabet_val < ALFABET_SIZE; alfabet_val++) {
+        ctx->current_combination[ctx->coset_idx] = alfabet_val;
+        for (size_t j = 1; j < ctx->N; j++) {
+           ctx->current_dft[j] = ctx->current_dft[j] + alfabet_val * ctx->dft_matrix[ctx->coset_idx][j];
+            ctx->current_psd[j] = (int)rint(pow(cabs(ctx->current_dft[j]), 2));
+        }
+        ctx->coset_idx++;
+        if (check_bound(ctx)) {
+            dfs_explore_combinations(ctx);
+        }
+        ctx->coset_idx--;
         ctx->current_combination[ctx->coset_idx] = 0;
-        ctx->coset_idx++;
-        dfs_explore_combinations(ctx);
-        ctx->coset_idx--;
-    }
-    
-    // Rama 2: Incluir el coset actual (valor 1)
-    for (size_t j = 1; j < ctx->N; j++) {
-        ctx->current_dft[j] = ctx->current_dft[j] + ctx->dft_matrix[ctx->coset_idx][j];
-        ctx->current_psd[j] = (int)rint(pow(cabs(ctx->current_dft[j]), 2));
-    }
-    ctx->current_combination[ctx->coset_idx] = 1; 
-    if (check_bound(ctx)) {
-        //printf("Entra por 1 en el coset %zu.\n", coset_idx);
-            
-        /*for (size_t prueba = 0; prueba < ctx->num_cosets; prueba++) {
-            printf("%u", current_combination[prueba]);
-        
-        printf("\n");*/
-        ctx->coset_idx++;
-        dfs_explore_combinations(ctx);
-        ctx->coset_idx--;
-    }
-    ctx->current_combination[ctx->coset_idx] = 0; 
-    // Retroceso: deshacer cambios
-    for (size_t j = 1; j < ctx->N; j++) {
-        ctx->current_dft[j] = ctx->current_dft[j] - ctx->dft_matrix[ctx->coset_idx][j];
-        ctx->current_psd[j] = (int)rint(pow(cabs(ctx->current_dft[j]), 2));
+        for (size_t j = 1; j < ctx->N; j++) {
+            ctx->current_dft[j] = ctx->current_dft[j] - alfabet_val * ctx->dft_matrix[ctx->coset_idx][j];
+            ctx->current_psd[j] = (int)rint(pow(cabs(ctx->current_dft[j]), 2));
+        }
     }
 }
 
@@ -418,9 +379,9 @@ void process_and_filter_vectors_dfs(CosetList *cl, size_t N, int p, int q) {
 
 
 int main(void) {
-    int p = 11;
+    int p = 7;
     int q = 3;
-    size_t N = (size_t)(p*q*q);
+    size_t N = 63;
     size_t k;
     int tamanos[N];
     for (size_t i = 0; i < N; i++) {
@@ -433,7 +394,7 @@ int main(void) {
             free_cosetlist(&cl);
         }
     }
-    for (int minimo_size = 2; minimo_size < N; minimo_size++) {
+    for (int minimo_size = 2; minimo_size <= N; minimo_size++) {
         for (int k=1; k< N; k++){
             if (tamanos[k]==minimo_size){
                 printf("k=%d tiene %d cosets\n",k,tamanos[k]);
