@@ -8,7 +8,7 @@
 
 
 
-static void print_bits(const uint8_t *v, size_t n, const char *name) {
+static void print_bits(const int *v, size_t n, const char *name) {
     printf("%s = [", name);
     for (size_t i = 0; i < n; ++i) {
         printf("%u", (unsigned)v[i]);
@@ -17,7 +17,7 @@ static void print_bits(const uint8_t *v, size_t n, const char *name) {
     printf("]\n");
 }
 
-static void print_vector(const uint8_t *v, size_t n) {
+static void print_vector(const int *v, size_t n) {
     printf("[");
     for (size_t i = 0; i < n; i++) {
         printf("%u", (unsigned)v[i]);
@@ -29,8 +29,8 @@ static void print_vector(const uint8_t *v, size_t n) {
 
 /* Versión modificada de BinaryCombinations que genera vectores completos */
 typedef struct {
-    uint8_t **vectors;        // Array de vectores de longitud N
-    uint8_t **combinations;   // Array de combinaciones de cosets (para referencia)
+    int **vectors;        // Array de vectores de longitud N
+    int **combinations;   // Array de combinaciones de cosets (para referencia)
     size_t num_vectors;       // Número total de vectores (2^num_cosets)
     size_t vector_length;     // Longitud de cada vector (N)
     size_t num_cosets;        // Número de cosets
@@ -51,10 +51,10 @@ static int find_element_in_cosets(const CosetList *cl, size_t element) {
 
 
 /* Genera vector completo para una combinación dada de cosets */
-uint8_t* generate_vector_for_combination(const CosetList *cl, 
-                                        const uint8_t *combination, 
+int* generate_vector_for_combination(const CosetList *cl, 
+                                        const int *combination, 
                                         size_t N) {
-    uint8_t *vector = (uint8_t*)calloc(N, sizeof(uint8_t));
+    int *vector = (int*)calloc(N, sizeof(int));
     if (!vector) {
         fprintf(stderr, "ERROR: sin memoria para vector\n");
         return NULL;
@@ -97,8 +97,8 @@ CosetVectors* generate_coset_vectors(const CosetList *cl, size_t N) {
     result->vector_length = N;
     
     // Reservar memoria para combinaciones
-    result->combinations = (uint8_t**)malloc(result->num_vectors * sizeof(uint8_t*));
-    result->vectors = (uint8_t**)malloc(result->num_vectors * sizeof(uint8_t*));
+    result->combinations = (int**)malloc(result->num_vectors * sizeof(int*));
+    result->vectors = (int**)malloc(result->num_vectors * sizeof(int*));
     
     if (!result->combinations || !result->vectors) {
         fprintf(stderr, "ERROR: sin memoria para arrays\n");
@@ -109,13 +109,13 @@ CosetVectors* generate_coset_vectors(const CosetList *cl, size_t N) {
     }
     
     // Inicializar todo a NULL
-    memset(result->combinations, 0, result->num_vectors * sizeof(uint8_t*));
-    memset(result->vectors, 0, result->num_vectors * sizeof(uint8_t*));
+    memset(result->combinations, 0, result->num_vectors * sizeof(int*));
+    memset(result->vectors, 0, result->num_vectors * sizeof(int*));
     
     // Generar cada combinación y su vector correspondiente
     for (size_t i = 0; i < result->num_vectors; i++) {
         // 1. Generar combinación binaria para los cosets
-        result->combinations[i] = (uint8_t*)malloc(cl->len * sizeof(uint8_t));
+        result->combinations[i] = (int*)malloc(cl->len * sizeof(int));
         if (!result->combinations[i]) {
             fprintf(stderr, "ERROR: sin memoria para combination %zu\n", i);
             goto error_cleanup;
@@ -193,9 +193,9 @@ void print_coset_vectors(const CosetVectors *cv, const CosetList *cl) {
 }
 
 
-uint8_t** PSD(const CosetVectors * cv, size_t N) {
+int** PSD(const CosetVectors * cv, size_t N) {
     double psd_total = 0.0;
-    uint8_t resultado[cv->num_vectors][N];
+    int resultado[cv->num_vectors][N];
     complex double dft_temp[N];
 
     for (size_t i = 0; i < cv->num_vectors; i++) {
@@ -271,11 +271,11 @@ int save_vectors(const CosetVectors *cv, const char *filename) {
     return 1;
 }
 
-static void legendre_sequence(int p,  uint8_t *sequence)
+static void legendre_sequence(int p,  int *sequence)
 {
     sequence[0] = 5;
     for (int n = 1; n < p; n++) {
-        uint8_t legendre_symbol = 3;
+        int legendre_symbol = 3;
         for (int k = 1; k <= (p - 1) / 2; k++) {
             if ((n % p) == (k * k % p)) {
                 legendre_symbol = 6;
@@ -288,7 +288,7 @@ static void legendre_sequence(int p,  uint8_t *sequence)
 
 
 
-bool is_compression(int N, int p, uint8_t *sequence, uint8_t *compressed)
+bool is_compression(int N, int p, int *sequence, int *compressed)
 {
     int temp[p];
     for (int i = 0; i < p; i++) {
@@ -309,10 +309,10 @@ bool is_compression(int N, int p, uint8_t *sequence, uint8_t *compressed)
 
 }
 
-bool is_less_than_compression(int N, int p,uint8_t *sequence, uint8_t *compressed, uint8_t *bound_sequence)
+bool is_less_than_compression(int N, int p,int *sequence, int *compressed, int *bound_sequence)
 {
-    uint16_t temp;
-    uint16_t temp_bound;
+    int temp;
+    int temp_bound;
     for (int i = 0; i < p; i++)
     {
         temp = compressed[i];
@@ -326,13 +326,24 @@ bool is_less_than_compression(int N, int p,uint8_t *sequence, uint8_t *compresse
         {
             return false;
         }
+        if (false)
+        {
+            printf("Bound exceeded at index %d: temp = %u, bound = %u\n", i, temp, temp_bound);
+            print_bits(sequence, N, "Sequence0");
+            print_bits(bound_sequence, N, "Sequence1");
+            for (int j = 0; p * j < N; j++) {
+                printf("Index %d: sequence contribution = %u, bound contribution = %u\n", (i + p * j) % N, sequence[(i + p * j) % N], bound_sequence[(i + p * j) % N]);
+            }
+            print_bits(compressed, p, "Compressed0");
+
+        }
     }
     return true;
 
 }
 
 /* Convierte vector binario a complejo (-1/+1) */
-static void binary_to_complex(const uint8_t *binary, double complex *complex_arr, size_t N) {
+static void binary_to_complex(const int *binary, double complex *complex_arr, size_t N) {
     for (size_t i = 0; i < N; i++) {
         complex_arr[i] = (binary[i] == 0) ? 1.0 + 0.0*I : 0 + 0.0*I;
     }
@@ -538,7 +549,7 @@ void process_and_filter_vectors(const CosetList *cl, size_t N) {
     // Buffers de trabajo (RAM constante)
     double complex *time_domain = malloc(N * sizeof(double complex));
     double complex *freq_domain = malloc(N * sizeof(double complex));
-    uint8_t *combination = malloc(num_cosets * sizeof(uint8_t));
+    int *combination = malloc(num_cosets * sizeof(int));
     double *current_psd = malloc(N * sizeof(double));
 
     printf("=== INICIANDO PROCESO (N=%zu) ===\n", N);
@@ -551,7 +562,7 @@ void process_and_filter_vectors(const CosetList *cl, size_t N) {
         }
 
         // 2. Mapear cosets al vector de bits de longitud N
-        uint8_t *vector_bits = generate_vector_for_combination(cl, combination, N);
+        int *vector_bits = generate_vector_for_combination(cl, combination, N);
         
         // 3. Transformada de Fourier
         binary_to_complex(vector_bits, time_domain, N);
@@ -627,21 +638,21 @@ typedef struct {
     double complex *current_dft;
     int *current_psd;
     int *bound_psd;
-    uint8_t *compression_a;
-    uint8_t *compression_b;
+    int *compression_a;
+    int *compression_b;
     int p;
     int coset_idx;
     CosetList *cl;
-    uint8_t *current_combination;
+    int *current_combination;
 } DFSContext;
 
 bool check_bound(const DFSContext *ctx) {
-    uint8_t *vector_bits = generate_vector_for_combination(ctx->cl, ctx->current_combination, ctx->N);
-    uint8_t *temp0 = malloc(ctx->cl->len * sizeof(uint8_t));
+    int *vector_bits = generate_vector_for_combination(ctx->cl, ctx->current_combination, ctx->N);
+    int *temp0 = malloc(ctx->cl->len * sizeof(int));
     for (size_t j = ctx->coset_idx; j < ctx->cl->len; j++) {
         temp0[j] = 1;
     }
-    uint8_t *temp1 = generate_vector_for_combination(ctx->cl, temp0, ctx->N);
+    int *temp1 = generate_vector_for_combination(ctx->cl, temp0, ctx->N);
     if  ( !is_less_than_compression(ctx->N, ctx->p, vector_bits, ctx->compression_a, temp1))
     {
         if (!is_less_than_compression(ctx->N, ctx->p, vector_bits, ctx->compression_b, temp1)) {
@@ -673,8 +684,8 @@ bool check_bound(const DFSContext *ctx) {
 }
 
 bool is_valid_combination(const DFSContext *ctx) {
-    uint8_t *vector_bits = generate_vector_for_combination(ctx->cl, ctx->current_combination, ctx->N);
-    uint8_t temp[ctx->N];
+    int *vector_bits = generate_vector_for_combination(ctx->cl, ctx->current_combination, ctx->N);
+    int temp[ctx->N];
     for (size_t j = 0; j < ctx->N; j++) {
         temp[j] = vector_bits[j];
     }
@@ -708,7 +719,7 @@ void dfs_explore_combinations(
             //}
             printf(" -> Max PSD: %d\n", max_psd);
             printf("Vector bits: ");*/
-            uint8_t *vector_bits = generate_vector_for_combination(ctx->cl, ctx->current_combination, ctx->N);            
+            int *vector_bits = generate_vector_for_combination(ctx->cl, ctx->current_combination, ctx->N);            
             /*for (size_t j = 0; j < ctx->N; j++) {
                 printf("%u", vector_bits[j]);
             //}
@@ -794,10 +805,10 @@ void process_and_filter_vectors_dfs(CosetList *cl, size_t N, int p) {
     double complex *freq_domain = malloc(N * sizeof(double complex));
     int *current_psd = malloc(N * sizeof(int));
     int *bound_psd = malloc(N * sizeof(int));
-    uint8_t *compression_a = malloc(p * sizeof(uint8_t));
-    uint8_t *compression_b = malloc(p * sizeof(uint8_t));
+    int *compression_a = malloc(p * sizeof(int));
+    int *compression_b = malloc(p * sizeof(int));
     double complex *current_dft = malloc(N * sizeof(double complex));
-    uint8_t *combination = malloc(cl->len * sizeof(uint8_t));
+    int *combination = malloc(cl->len * sizeof(int));
     legendre_sequence(p, compression_a);
     for (int i = 0; i < p; i++) {
         if (compression_a[i] == 5) {
@@ -821,7 +832,7 @@ void process_and_filter_vectors_dfs(CosetList *cl, size_t N, int p) {
     // Calcular DFT y PSD para cada coset
     for (size_t i = 0; i < cl->len; i++) {
         combination[i] = 1;
-        uint8_t *vector_bits = generate_vector_for_combination(cl, combination, N);
+        int *vector_bits = generate_vector_for_combination(cl, combination, N);
         for (size_t j = 0; j < N; j++) {
             printf("%u", vector_bits[j]);
         }

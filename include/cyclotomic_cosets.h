@@ -4,7 +4,7 @@
 #define CYCLOTOMIC_COSETS_H
 
 #include <stddef.h>  // size_t
-#include <stdint.h>  // uint8_t
+#include <stdint.h>  // int
 #include <stdbool.h>  // bool
 
 #ifdef __cplusplus
@@ -46,9 +46,9 @@ bool coset_is_subset_of(const Coset *a, const Coset *b);
  * @param c  coset a comprobar (si es NULL o c->len==0, se considera conjunto vacío
  *           y devolverá todo '1')
  * @param cl lista de cosets (si es NULL o cl->len==0, devuelve NULL)
- * @return   puntero a array de uint8_t (0/1) de longitud cl->len. Debes liberar con free().
+ * @return   puntero a array de int (0/1) de longitud cl->len. Debes liberar con free().
  */
-uint8_t* coset_membership_vector(const Coset *c, const CosetList *cl);
+int* coset_membership_vector(const Coset *c, const CosetList *cl);
 
 #ifdef __cplusplus
 }
