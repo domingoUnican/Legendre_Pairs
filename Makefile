@@ -5,7 +5,7 @@ BUILD   := build
 SRC     := src
 BIN     := $(BUILD)/app
 
-OBJS := $(BUILD)/cyclotomic_cosets.o $(BUILD)/mymath.o $(BUILD)/temporal.o
+OBJS := $(BUILD)/cyclotomic_cosets.o $(BUILD)/mymath.o $(BUILD)/temporal.o $(BUILD)/pairs_reader.o
 
 $(BIN): $(OBJS)
 	$(CC) $(OBJS) -o $@ -lm
