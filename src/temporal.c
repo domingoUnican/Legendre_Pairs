@@ -5,6 +5,7 @@
 #include "mymath.h"
 #include <complex.h>
 #include <math.h>
+#include "pairs_reader.h"
 #define ALFABET_SIZE 2
 // New version of gcd that works for negative numbers as well
 int gcd(int a, int b)
@@ -122,6 +123,9 @@ typedef struct {
     int coset_idx;
     CosetList *cl;
     int *current_combination;
+    int **candidate_pairs;
+    size_t num_candidate_pairs;
+    size_t dimension_candidate_pairs;
 } DFSContext;
 
 bool is_compression(int N, int p, int *sequence, int *compressed)
@@ -144,6 +148,47 @@ bool is_compression(int N, int p, int *sequence, int *compressed)
     return true;
 
 }
+bool is_less_than_candidates(const DFSContext *ctx, int *sequence, int *bound_sequence)
+{
+    int compresion_count =(int) ( ctx->N / ctx->dimension_candidate_pairs );
+    for (size_t i=0; i<ctx->dimension_candidate_pairs; i++) {
+        for (size_t j=1; j<compresion_count; j++) {
+            sequence[i] += sequence[i + j * ctx->dimension_candidate_pairs];
+            bound_sequence[i] += bound_sequence[i + j * ctx->dimension_candidate_pairs];
+        }
+    }
+    bool matches_a = false;
+    for (size_t pos = 0; (pos < ctx->num_candidate_pairs) && !matches_a; pos++) {
+        matches_a = true;
+        for (size_t j = 0; (j < ctx->dimension_candidate_pairs) && matches_a; j++) {
+            if (sequence[j] > ctx->candidate_pairs[pos][j] || bound_sequence[j] + sequence[j] < ctx->candidate_pairs[pos][j]) {
+                matches_a = false;
+            }
+        }
+    }
+    return matches_a; // No se encontró ningún par que coincida
+}
+
+
+bool is_compression_of_candidates(const DFSContext *ctx, int *sequence)
+{
+    int compresion_count =(int) ( ctx->N / ctx->dimension_candidate_pairs );
+    for (size_t i=0; i<ctx->dimension_candidate_pairs; i++) {
+        for (size_t j=1; j<compresion_count; j++) {
+            sequence[i] += sequence[i + j * ctx->dimension_candidate_pairs];
+        }
+    }
+    bool matches_a = false;
+    for (size_t pos = 0; (pos < ctx->num_candidate_pairs) && !matches_a; pos++) {
+        bool matches_a = true;
+        for (size_t j = 0; (j < ctx->dimension_candidate_pairs) && matches_a; j++) {
+            if (sequence[j] != ctx->candidate_pairs[pos][j]) {
+                matches_a = false;
+            }
+        }
+    }
+    return matches_a; // No se encontró ningún par que coincida
+}
 
 bool check_bound(const DFSContext *ctx) {
     int *vector_bits = generate_vector_for_combination(ctx->cl, ctx->current_combination, ctx->N);
@@ -152,15 +197,17 @@ bool check_bound(const DFSContext *ctx) {
         temp0[j] = 1;
     }
     int *temp1 = generate_vector_for_combination(ctx->cl, temp0, ctx->N);
-    bool result = true;
+    bool result = is_less_than_candidates(ctx, vector_bits, temp1);
     
+    /* This is for using the compression check*/
+    /*
     if  ( !is_less_than_compression(ctx->N, ctx->p, vector_bits, ctx->compression_a, temp1))
     {
         if (!is_less_than_compression(ctx->N, ctx->p, vector_bits, ctx->compression_b, temp1)) {
             result = false;
         }
     }
-    
+    */
     free(vector_bits);
     free(temp1);
     free(temp0);
@@ -193,8 +240,11 @@ bool is_valid_combination(const DFSContext *ctx) {
     free(vector_bits);
     
     bool result = false;
-    bool is_compressed = is_compression(ctx->N, ctx->p, temp, ctx->compression_a);
-    if (is_compressed ||  is_compression(ctx->N, ctx->p, temp, ctx->compression_b)){
+    /* This does not uses the candidates, now we are going to use them*/
+    //bool is_compressed = is_compression(ctx->N, ctx->p, temp, ctx->compression_a);
+    //if (is_compressed ||  is_compression(ctx->N, ctx->p, temp, ctx->compression_b)){
+    if (is_compression_of_candidates(ctx,temp))
+    {
         int max_psd = -1;
         for (size_t j = 1; j < ctx->N; j++) {
             if (ctx->current_psd[j] > max_psd) {
@@ -308,12 +358,18 @@ void process_and_filter_vectors_dfs(CosetList *cl, size_t N, int p, int q) {
     FILE *f_comb = fopen("combinations.txt", "a");
     FILE *f_psd = fopen("dft.txt", "a");
     FILE *f_cte = fopen("cte-dft.txt", "a");
-
-    if (!f_comb || !f_psd || !f_cte) {
-        printf("ERROR: No se pudieron abrir los archivos.\n");
+    size_t rows, cols;
+    int **pairs = read_pairs_file("single_sequences.txt", &rows, &cols);
+    if (cols == 33)
+    {
+        printf("Archivo de pares leído correctamente: %zu filas, %zu columnas\n", rows, cols);
+    }
+    if (!f_comb || !f_psd || !f_cte || !pairs) {
+        printf("ERROR: No se pudieron abrir los archivos o leer los pares.\n");
         if (f_comb) fclose(f_comb);
         if (f_psd) fclose(f_psd);
         if (f_cte) fclose(f_cte);
+        if (pairs) free_pairs(pairs, rows);
         
         // Limpiar memoria antes de salir
         for (size_t i = 0; i < cl->len; i++) {
@@ -329,6 +385,15 @@ void process_and_filter_vectors_dfs(CosetList *cl, size_t N, int p, int q) {
         free(compression_a);
         free(compression_b);
         return;
+    }
+    //printf("Nueva secuencia de pares:\n");
+    int compresion_count =(int) ( N / cols ); 
+    for (size_t i=0; i<rows; i++) {
+        for (size_t j=0; j<cols; j++) {
+            pairs[i][j] = (compresion_count + pairs[i][j]) >> 1;
+            //printf("%d ", pairs[i][j]);
+        }
+        //printf("\n");
     }
 
     // Preparar contexto
@@ -351,7 +416,10 @@ void process_and_filter_vectors_dfs(CosetList *cl, size_t N, int p, int q) {
         .compression_b = compression_b,
         .cl = cl, 
         .current_combination = combination,
-        .coset_idx = 0
+        .coset_idx = 0,
+        .candidate_pairs = pairs,
+        .num_candidate_pairs = rows,
+        .dimension_candidate_pairs = cols
     };
 
     printf("=== EXPLORACIÓN DFS (N=%zu, cosets=%zu) ===\n", N, cl->len);
@@ -372,7 +440,7 @@ void process_and_filter_vectors_dfs(CosetList *cl, size_t N, int p, int q) {
     free(combination);
     free(compression_a);
     free(compression_b);
-    
+    if (pairs) free_pairs(pairs, rows);
     fclose(f_comb);
     fclose(f_psd);
     fclose(f_cte);
@@ -386,7 +454,7 @@ void process_and_filter_vectors_dfs(CosetList *cl, size_t N, int p, int q) {
 
 
 int main(void) {
-    int p = 5;
+    int p = 11;
     int q = 3;
     size_t N = (size_t)(p*q*q);
     size_t k;
