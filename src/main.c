@@ -653,18 +653,22 @@ bool check_bound(const DFSContext *ctx) {
         temp0[j] = 1;
     }
     uint8_t *temp1 = generate_vector_for_combination(ctx->cl, temp0, ctx->N);
+    bool result = true;
+    
     if  ( !is_less_than_compression(ctx->N, ctx->p, vector_bits, ctx->compression_a, temp1))
     {
         if (!is_less_than_compression(ctx->N, ctx->p, vector_bits, ctx->compression_b, temp1)) {
-            free(vector_bits);
-            free(temp1);
-            free(temp0);
-            return false;
+            result = false;
         }
     }
+    
     free(vector_bits);
     free(temp1);
     free(temp0);
+    
+    if (!result) {
+        return false;
+    }
     /*if ( !is_less_compression_a && !is_less_compression_b) {
         return false;
     }*/
@@ -686,10 +690,8 @@ bool check_bound(const DFSContext *ctx) {
 bool is_valid_combination(const DFSContext *ctx) {
     uint8_t *vector_bits = generate_vector_for_combination(ctx->cl, ctx->current_combination, ctx->N);
     uint8_t temp[ctx->N];
-    for (size_t j = 0; j < ctx->N; j++) {
-        temp[j] = vector_bits[j];
-    }
-    free(vector_bits);
+    
+    bool result = false;
     bool is_compressed = is_compression(ctx->N, ctx->p, temp, ctx->compression_a);
     if (is_compressed ||  is_compression(ctx->N, ctx->p, temp, ctx->compression_b)){
         int max_psd = -1;
@@ -697,6 +699,10 @@ bool is_valid_combination(const DFSContext *ctx) {
             if (ctx->current_psd[j] > max_psd) {
                 max_psd = ctx->current_psd[j];
             }
+        }
+        result = (max_psd <= (int)ctx->threshold);
+    }
+    return result
         }
         return max_psd <= (int)ctx->threshold;
     }
@@ -918,6 +924,8 @@ void process_and_filter_vectors_dfs(CosetList *cl, size_t N, int p) {
     free(current_psd);
     free(bound_psd);
     free(combination);
+    free(compression_a);
+    free(compression_b);
     
     fclose(f_comb);
     fclose(f_psd);

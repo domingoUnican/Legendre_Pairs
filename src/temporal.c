@@ -6,7 +6,7 @@
 #include <complex.h>
 #include <math.h>
 #define ALFABET_SIZE 2
-
+// New version of gcd that works for negative numbers as well
 int gcd(int a, int b)
 {
     int temp;
@@ -152,19 +152,22 @@ bool check_bound(const DFSContext *ctx) {
         temp0[j] = 1;
     }
     int *temp1 = generate_vector_for_combination(ctx->cl, temp0, ctx->N);
+    bool result = true;
+    
     if  ( !is_less_than_compression(ctx->N, ctx->p, vector_bits, ctx->compression_a, temp1))
     {
         if (!is_less_than_compression(ctx->N, ctx->p, vector_bits, ctx->compression_b, temp1)) {
-            return false;
-            free(vector_bits);
-            free(temp1);
-            free(temp0);
-            return false;
+            result = false;
         }
     }
+    
     free(vector_bits);
     free(temp1);
     free(temp0);
+    
+    if (!result) {
+        return false;
+    }
     int max_diff = -1;
     for (size_t j = 1; j < ctx->N; j++) {
         int bound_remaining_j = 0;
@@ -188,6 +191,8 @@ bool is_valid_combination(const DFSContext *ctx) {
         temp[j] = vector_bits[j];
     }
     free(vector_bits);
+    
+    bool result = false;
     bool is_compressed = is_compression(ctx->N, ctx->p, temp, ctx->compression_a);
     if (is_compressed ||  is_compression(ctx->N, ctx->p, temp, ctx->compression_b)){
         int max_psd = -1;
@@ -196,11 +201,11 @@ bool is_valid_combination(const DFSContext *ctx) {
                 max_psd = ctx->current_psd[j];
             }
         }
-        free(temp);
-        return max_psd <= (int)ctx->threshold;
+        result = (max_psd <= (int)ctx->threshold);
     }
+    
     free(temp);
-    return false;
+    return result;
 }
 
 void dfs_explore_combinations( DFSContext *ctx) 
@@ -365,6 +370,8 @@ void process_and_filter_vectors_dfs(CosetList *cl, size_t N, int p, int q) {
     free(current_psd);
     free(bound_psd);
     free(combination);
+    free(compression_a);
+    free(compression_b);
     
     fclose(f_comb);
     fclose(f_psd);
@@ -379,9 +386,9 @@ void process_and_filter_vectors_dfs(CosetList *cl, size_t N, int p, int q) {
 
 
 int main(void) {
-    int p = 7;
+    int p = 5;
     int q = 3;
-    size_t N = 63;
+    size_t N = (size_t)(p*q*q);
     size_t k;
     int tamanos[N];
     for (size_t i = 0; i < N; i++) {
