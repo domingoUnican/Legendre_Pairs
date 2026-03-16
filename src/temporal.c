@@ -193,13 +193,64 @@ bool is_less_than_candidates(const DFSContext *ctx, const int *sequence, const i
     // El array está ordenado: pairs_temp[pos][j] >= pairs_temp[pos+1][j]
     bool matches_a = false;
     size_t left = 0, right = num_candidate_pairs - 1;
-    for (size_t pos = 0; (pos < dimension_candidate_pairs); pos++) 
+    int total_iterations = 0;
+    
+    for (size_t pos = 0; (pos < dimension_candidate_pairs) && (left <= right); pos++) 
     {
-        while (copia[pos]> pairs_temp[right][pos] && right > left) {
-            right--;
+        // Verificar primero si right ya cumple la condición
+        total_iterations = 0; // Reiniciar contador para la búsqueda del right
+        if (copia[pos] > pairs_temp[right][pos]) {
+            // Si no cumple, hacer búsqueda binaria para encontrar el mínimo right donde copia[pos] <= pairs_temp[right][pos]
+            int l = left, r = right;
+            int new_right = -1;
+            while (l <= r) {
+                total_iterations++;
+                if (total_iterations > 100) {
+                    return true;  // Exceso de iteraciones, retornar true como salvaguarda
+                }
+                int mid = (l + r) >> 1;
+                if (copia[pos] <= pairs_temp[mid][pos]) {
+                    new_right = mid;
+                    r = mid - 1;  // Buscar más a la izquierda para encontrar el mínimo
+                } else {
+                    l = mid + 1;
+                }
+            }
+            // Si encontramos un right válido, actualizar; si no quedamos fuera del rango
+            if (new_right != -1) {
+                right = new_right;
+            } else {
+                // No hay ningún elemento que cumpla la condición, terminar este pos
+                return true;
+            }
         }
-        while (copia[pos] + bound_sequence[pos] < pairs_temp[left][pos] && left < right) {
-            left++;
+        
+        // Verificar primero si left ya cumple la condición
+        total_iterations = 0; // Reiniciar contador para la búsqueda del left
+        if (copia[pos] + bound_sequence[pos] < pairs_temp[left][pos]) {
+            // Si no cumple, hacer búsqueda binaria para encontrar el máximo left donde copia[pos] + bound_sequence[pos] >= pairs_temp[left][pos]
+            int l = left, r = right;
+            int new_left = -1;
+            while (l <= r) {
+                total_iterations++;
+                if (total_iterations > 100) {
+                    return true;  // Exceso de iteraciones, retornar true como salvaguarda
+                }
+                int mid = (l + (r - l + 1)) >> 1;  // Redondear hacia arriba para búsqueda del máximo
+                if (copia[pos] + bound_sequence[pos] >= pairs_temp[mid][pos]) {
+                    new_left = mid;
+                    l = mid + 1;  // Buscar más a la derecha para encontrar el máximo
+                } else {
+                    r = mid - 1;
+                }
+            }
+            // Si encontramos un left válido, actualizar; si no quedamos fuera del rango
+            if (new_left != -1 && new_left >= left) {
+                left = new_left;
+            } else {
+                // No hay ningún elemento que cumpla la condición, terminar este pos
+                return true;
+            }
         }
         /*
         for (size_t j = 0; (j < dimension_candidate_pairs) && matches_a; j++) {
@@ -295,7 +346,7 @@ bool is_compression_of_candidates(const DFSContext *ctx, const int *sequence, in
         } else {
             // cmp == 0: caso imposible - arrays iguales pero es_igual fue false
             // Esto indica un error lógico, terminar búsqueda
-            break;
+            return true;
         }
     }
     /*printf("Vector comprimido para flag=%d: ", flag);
