@@ -123,9 +123,12 @@ typedef struct {
     int coset_idx;
     CosetList *cl;
     int *current_combination;
-    int **candidate_pairs;
-    size_t num_candidate_pairs;
-    size_t dimension_candidate_pairs;
+    int **candidate_pairs1;
+    size_t num_candidate_pairs1;
+    size_t dimension_candidate_pairs1;
+    int **candidate_pairs2;
+    size_t num_candidate_pairs2;
+    size_t dimension_candidate_pairs2;
 } DFSContext;
 
 bool is_compression(int N, int p, int *sequence, int *compressed)
@@ -148,46 +151,161 @@ bool is_compression(int N, int p, int *sequence, int *compressed)
     return true;
 
 }
-bool is_less_than_candidates(const DFSContext *ctx, int *sequence, int *bound_sequence)
+bool is_less_than_candidates(const DFSContext *ctx, const int *sequence, const int *bound_bit_sequence, int flag)
 {
-    int compresion_count =(int) ( ctx->N / ctx->dimension_candidate_pairs );
-    for (size_t i=0; i<ctx->dimension_candidate_pairs; i++) {
+    int dimension_candidate_pairs = (flag == 1) ? ctx->dimension_candidate_pairs1 : ctx->dimension_candidate_pairs2;
+    int num_candidate_pairs = (flag == 1) ? ctx->num_candidate_pairs1 : ctx->num_candidate_pairs2;
+    int copia[ctx->N];
+    int bound_sequence[ctx->N];
+    int **pairs_temp = (flag == 1) ? ctx->candidate_pairs1 : ctx->candidate_pairs2;
+    /*printf("****************************************************************\n");
+    printf("Comprobando compresión de candidatos para flag=%d\n", flag);
+    printf("Secuencia original para el coset %d flag=%d: ", ctx->coset_idx, flag);
+    for (size_t i = 0; i < ctx->N; i++) {
+        printf("%d ", sequence[i]);
+    }
+    printf("\n");*/
+    int compresion_count =(int) ( ctx->N / dimension_candidate_pairs );
+    for (size_t j = 0; j < dimension_candidate_pairs; j++) {
+        copia[j] = sequence[j];
+        bound_sequence[j] = bound_bit_sequence[j];
+    }
+    for (size_t i=0; i<dimension_candidate_pairs; i++) {
         for (size_t j=1; j<compresion_count; j++) {
-            sequence[i] += sequence[i + j * ctx->dimension_candidate_pairs];
-            bound_sequence[i] += bound_sequence[i + j * ctx->dimension_candidate_pairs];
+            copia[i] += sequence[i + j * dimension_candidate_pairs];
+            bound_sequence[i] += bound_bit_sequence[i + j * dimension_candidate_pairs];
         }
     }
+    /*
+    printf("Vector comprimido para flag=%d: ", flag);
+    for (size_t i = 0; i < dimension_candidate_pairs; i++) {
+        printf("%d ", copia[i]);
+    }
+    printf("\n");
+    printf("Bound comprimido para flag=%d: ", flag);
+    for (size_t i = 0; i < dimension_candidate_pairs; i++) {
+        printf("%d ", bound_sequence[i]);
+    }
+    printf("\n");
+    */
+    
+    // Búsqueda binaria aprovechando orden lexicográfico
+    // El array está ordenado: pairs_temp[pos][j] >= pairs_temp[pos+1][j]
     bool matches_a = false;
-    for (size_t pos = 0; (pos < ctx->num_candidate_pairs) && !matches_a; pos++) {
-        matches_a = true;
-        for (size_t j = 0; (j < ctx->dimension_candidate_pairs) && matches_a; j++) {
-            if (sequence[j] > ctx->candidate_pairs[pos][j] || bound_sequence[j] + sequence[j] < ctx->candidate_pairs[pos][j]) {
-                matches_a = false;
-            }
+    size_t left = 0, right = num_candidate_pairs - 1;
+    for (size_t pos = 0; (pos < dimension_candidate_pairs); pos++) 
+    {
+        while (copia[pos]> pairs_temp[right][pos] && right > left) {
+            right--;
         }
+        while (copia[pos] + bound_sequence[pos] < pairs_temp[left][pos] && left < right) {
+            left++;
+        }
+        /*
+        for (size_t j = 0; (j < dimension_candidate_pairs) && matches_a; j++) {
+            if (copia[j] > pairs_temp[pos][j] || bound_sequence[j] + copia[j] < pairs_temp[pos][j]) {
+                /*
+                printf("No coincide con el par %zu para flag=%d\n", pos, flag);
+                printf("Par candidato: ");
+                for (size_t k = 0; k < dimension_candidate_pairs; k++) {
+                    printf("%d ", pairs_temp[pos][k]);
+                }
+                printf("\n");
+                matches_a = false;
+            }*/
     }
-    return matches_a; // No se encontró ningún par que coincida
+    /*printf("¿Coincide con algún par candidato para flag=%d? %s\n", flag, matches_a ? "Sí" : "No");*/
+    return left<=right; // No se encontró ningún par que coincida
 }
 
 
-bool is_compression_of_candidates(const DFSContext *ctx, int *sequence)
+bool is_compression_of_candidates(const DFSContext *ctx, const int *sequence, int flag)
 {
-    int compresion_count =(int) ( ctx->N / ctx->dimension_candidate_pairs );
-    for (size_t i=0; i<ctx->dimension_candidate_pairs; i++) {
+    int dimension_candidate_pairs = (flag == 1) ? ctx->dimension_candidate_pairs1 : ctx->dimension_candidate_pairs2;
+    int num_candidate_pairs = (flag == 1) ? ctx->num_candidate_pairs1 : ctx->num_candidate_pairs2;
+    int copia[ctx->N];
+    int **pairs_temp = (flag == 1) ? ctx->candidate_pairs1 : ctx->candidate_pairs2;
+    /*printf("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
+    printf("Secuencia original para el coset %d flag=%d: ", ctx->coset_idx, flag);
+    for (size_t i = 0; i < ctx->N; i++) {
+        printf("%d ", sequence[i]);
+    }
+    printf("\n");*/
+    for (size_t j = 0; j < dimension_candidate_pairs; j++) {
+        copia[j] = sequence[j];
+    }
+    int compresion_count =(int) ( ctx->N / dimension_candidate_pairs );
+    for (size_t i=0; i<dimension_candidate_pairs; i++) {
         for (size_t j=1; j<compresion_count; j++) {
-            sequence[i] += sequence[i + j * ctx->dimension_candidate_pairs];
+            copia[i] += sequence[i + j * dimension_candidate_pairs];
         }
     }
+    /*printf("imprimiendo la copia:\n");
+    for (size_t j = 0; j < dimension_candidate_pairs; j++) {
+        printf("%d ", copia[j]);
+    }
+    printf("\n");*/
+    
+    // Búsqueda binaria para encontrar copia en pairs_temp (ordenado lexicográficamente)
     bool matches_a = false;
-    for (size_t pos = 0; (pos < ctx->num_candidate_pairs) && !matches_a; pos++) {
-        bool matches_a = true;
-        for (size_t j = 0; (j < ctx->dimension_candidate_pairs) && matches_a; j++) {
-            if (sequence[j] != ctx->candidate_pairs[pos][j]) {
-                matches_a = false;
+    int left = 0, right = (int)num_candidate_pairs - 1;
+    int iterations = 0;
+    int max_iterations = 100;  // Failsafe contra bucles infinitos
+    
+    while (left <= right && !matches_a && iterations < max_iterations) {
+        iterations++;
+        int mid = (left + right) >> 1;
+        if (mid > right || mid < left) {
+            printf("Error: índice medio fuera de rango (mid=%d, left=%d, right=%d)\n", mid, left, right);
+            break; // Evitar desbordamiento
+        }
+        
+        // Verificar si copia es exactamente igual a pairs_temp[mid]
+        bool es_igual = true;
+        for (size_t j = 0; j < dimension_candidate_pairs && es_igual; j++) {
+            if (copia[j] != pairs_temp[mid][j]) {
+                es_igual = false;
             }
         }
+        
+        if (es_igual) {
+            matches_a = true;
+            break;
+        }
+        
+        // Comparación lexicográfica para decidir dirección de búsqueda
+        int cmp = 0;  // -1: copia<mid, 0: copia==mid, 1: copia>mid
+        for (size_t j = 0; j < dimension_candidate_pairs; j++) {
+            if (copia[j] < pairs_temp[mid][j]) {
+                cmp = -1;
+                break;
+            }
+            if (copia[j] > pairs_temp[mid][j]) {
+                cmp = 1;
+                break;
+            }
+        }
+        
+        if (cmp > 0) {
+            // copia es lexicográficamente mayor, buscar en la izquierda (valores mayores)
+            right = mid - 1;
+        } else if (cmp < 0) {
+            // copia es lexicográficamente menor, buscar en la derecha (valores menores)
+            left = mid + 1;
+        } else {
+            // cmp == 0: caso imposible - arrays iguales pero es_igual fue false
+            // Esto indica un error lógico, terminar búsqueda
+            break;
+        }
     }
-    return matches_a; // No se encontró ningún par que coincida
+    /*printf("Vector comprimido para flag=%d: ", flag);
+    for (size_t i = 0; i < dimension_candidate_pairs; i++) {
+        printf("%d ", copia[i]);
+    }
+    printf("\n");
+    printf("¿Coincide con algún par candidato para flag=%d? %s\n", flag, matches_a ? "Sí" : "No");
+    printf("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n");*/
+    return matches_a || iterations >= max_iterations; // No se encontró ningún par que coincida
 }
 
 bool check_bound(const DFSContext *ctx) {
@@ -197,7 +315,7 @@ bool check_bound(const DFSContext *ctx) {
         temp0[j] = 1;
     }
     int *temp1 = generate_vector_for_combination(ctx->cl, temp0, ctx->N);
-    bool result = is_less_than_candidates(ctx, vector_bits, temp1);
+    bool result = is_less_than_candidates(ctx, vector_bits, temp1, 1) && is_less_than_candidates(ctx, vector_bits, temp1, 0);
     
     /* This is for using the compression check*/
     /*
@@ -243,7 +361,7 @@ bool is_valid_combination(const DFSContext *ctx) {
     /* This does not uses the candidates, now we are going to use them*/
     //bool is_compressed = is_compression(ctx->N, ctx->p, temp, ctx->compression_a);
     //if (is_compressed ||  is_compression(ctx->N, ctx->p, temp, ctx->compression_b)){
-    if (is_compression_of_candidates(ctx,temp))
+    if (is_compression_of_candidates(ctx,temp,0) && is_compression_of_candidates(ctx,temp,1))
     {
         int max_psd = -1;
         for (size_t j = 1; j < ctx->N; j++) {
@@ -358,18 +476,17 @@ void process_and_filter_vectors_dfs(CosetList *cl, size_t N, int p, int q) {
     FILE *f_comb = fopen("combinations.txt", "a");
     FILE *f_psd = fopen("dft.txt", "a");
     FILE *f_cte = fopen("cte-dft.txt", "a");
-    size_t rows, cols;
-    int **pairs = read_pairs_file("single_sequences.txt", &rows, &cols);
-    if (cols == 33)
-    {
-        printf("Archivo de pares leído correctamente: %zu filas, %zu columnas\n", rows, cols);
-    }
-    if (!f_comb || !f_psd || !f_cte || !pairs) {
+    size_t rows1, cols1;
+    int **candidate1 = read_pairs_file("pairs_5", &rows1, &cols1);
+    size_t rows2, cols2;
+    int **candidate2 = read_pairs_file("pairs_9", &rows2, &cols2);
+    if (!f_comb || !f_psd || !f_cte || !candidate1 || !candidate2) {
         printf("ERROR: No se pudieron abrir los archivos o leer los pares.\n");
         if (f_comb) fclose(f_comb);
         if (f_psd) fclose(f_psd);
         if (f_cte) fclose(f_cte);
-        if (pairs) free_pairs(pairs, rows);
+        if (candidate1) free_pairs(candidate1, rows1);
+        if (candidate2) free_pairs(candidate2, rows2);
         
         // Limpiar memoria antes de salir
         for (size_t i = 0; i < cl->len; i++) {
@@ -386,16 +503,6 @@ void process_and_filter_vectors_dfs(CosetList *cl, size_t N, int p, int q) {
         free(compression_b);
         return;
     }
-    //printf("Nueva secuencia de pares:\n");
-    int compresion_count =(int) ( N / cols ); 
-    for (size_t i=0; i<rows; i++) {
-        for (size_t j=0; j<cols; j++) {
-            pairs[i][j] = (compresion_count + pairs[i][j]) >> 1;
-            //printf("%d ", pairs[i][j]);
-        }
-        //printf("\n");
-    }
-
     // Preparar contexto
     DFSContext ctx = {
         .f_comb = f_comb,
@@ -417,9 +524,12 @@ void process_and_filter_vectors_dfs(CosetList *cl, size_t N, int p, int q) {
         .cl = cl, 
         .current_combination = combination,
         .coset_idx = 0,
-        .candidate_pairs = pairs,
-        .num_candidate_pairs = rows,
-        .dimension_candidate_pairs = cols
+        .candidate_pairs1 = candidate1,
+        .num_candidate_pairs1 = rows1,
+        .dimension_candidate_pairs1 = cols1,
+        .candidate_pairs2 = candidate2,
+        .num_candidate_pairs2 = rows2,
+        .dimension_candidate_pairs2 = cols2
     };
 
     printf("=== EXPLORACIÓN DFS (N=%zu, cosets=%zu) ===\n", N, cl->len);
@@ -440,7 +550,8 @@ void process_and_filter_vectors_dfs(CosetList *cl, size_t N, int p, int q) {
     free(combination);
     free(compression_a);
     free(compression_b);
-    if (pairs) free_pairs(pairs, rows);
+    if (candidate1) free_pairs(candidate1, rows1);
+    if (candidate2) free_pairs(candidate2, rows2);
     fclose(f_comb);
     fclose(f_psd);
     fclose(f_cte);
